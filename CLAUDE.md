@@ -26,7 +26,14 @@
 | `js/character/CharacterBuilder.js` | Créateur + aperçu 3D, sauvegarde `localStorage` |
 | `js/court/CourtScene.js` | Demi-terrain (3v3, 4v4) et terrain entier (5v5), paniers, zones 2/3 pts (`threePointRadius = 5.55`) |
 | `js/gameplay/ShotMeter.js` | Jauge de tir (fenêtre verte), réussite selon timing, attributs, distance, contestation |
-| `js/gameplay/GameEngine.js` | Gameplay, clavier + manette (Gamepad API), dunks, contres, passes visées, IA (`updateBotAI`), règles |
+| `js/gameplay/GameEngine.js` | Cœur : scène, entités, `startMatch`, boucle `update`, collisions. Mélange les modules ci-dessous dans son prototype (`Object.assign` en bas du fichier) |
+| `js/gameplay/Controls.js` | Clavier, manette, boutons d'action, déplacement du joueur local |
+| `js/gameplay/Actions.js` | Dunk, saut/contre, crossover, visée et passes, interceptions, contres, rebonds, contestation |
+| `js/gameplay/Ball.js` | Lancement des passes/tirs, trajectoires, ballon libre, paniers et dunks |
+| `js/gameplay/Rules.js` | Panier attaqué, mi-temps, remises en jeu, possession, score, messages |
+| `js/gameplay/BotAI.js` | IA des bots (`updateBotAI`, `moveEntityTowards`) |
+| `js/gameplay/Camera.js` | Caméra 2K / Suivi, `viewFlipped` |
+| `js/gameplay/NetSync.js` | État du monde, joueurs distants, actions reçues, départs |
 | `js/network/NetworkManager.js` | PeerJS + BroadcastChannel, salons par code (`BASKET-42`, ou `?room=BASKET-42`) |
 
 ## Gameplay (résumé)
@@ -107,6 +114,15 @@
     `sidesSwapped` est dans `WORLD_STATE`, appliqué avant la remise en jeu chez l'invité.
   - Testé (hôte + invité) : caméra et « haut » retournés quand B attaque, mi-temps à 15-0 identique des deux
     côtés. Pas de fin de match : `targetScore` (21 / 30) ne sert qu'à la mi-temps.
+- **Feuille de route** (choisie par le joueur le 28 octobre 2026, dans cet ordre) :
+  1. ✅ Réorganiser le code : `GameEngine.js` (1 960 lignes) découpé en 8 fichiers par un script, méthodes
+     inchangées (empreinte de chaque fonction identique avant/après), retesté hôte + invité en 5v5.
+     Les modules sont des objets de méthodes (`export const XxxMethods = { ... }`) : `this` = le moteur.
+     Un getter (comme `isAuthority`) doit rester dans la classe (`Object.assign` ne copie pas les getters).
+  2. Graphismes : vrais personnages 3D animés (`.glb`, licence à vérifier pour chaque fichier), terrain, éclairage.
+  3. Actions et tactiques une par une : **écrans** (« block » = écran pour le joueur) et pick and roll,
+     alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers francs,
+     chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

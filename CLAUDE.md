@@ -119,7 +119,17 @@
      inchangées (empreinte de chaque fonction identique avant/après), retesté hôte + invité en 5v5.
      Les modules sont des objets de méthodes (`export const XxxMethods = { ... }`) : `this` = le moteur.
      Un getter (comme `isAuthority`) doit rester dans la classe (`Object.assign` ne copie pas les getters).
-  2. Graphismes : vrais personnages 3D animés (`.glb`, licence à vérifier pour chaque fichier), terrain, éclairage.
+  2. Graphismes — en cours :
+     - ✅ `js/render/RenderSetup.js` : `setupRenderer` (sRGB, tone mapping ACES, RoomEnvironment) sur les 3 scènes,
+       `asColorTexture` sur toute texture Canvas de couleur. Étiquettes et écrans : `toneMapped: false`.
+       ImportMap : `three/addons/` (examples/jsm de three 0.169).
+     - ✅ `CourtScene` : parquet en lattes (`drawWoodPlanks`, graine fixe), `MeshPhysicalMaterial` vernis,
+       panneaux LED, tribunes + ~880 spectateurs (2 `InstancedMesh`), écran géant (`updateScoreboard`, appelé par
+       `updateScoreboardUI`), rampes de projecteurs. Coût mesuré : ~3 ms par image (≈330 images/s) en 5v5.
+     - À faire : personnages animés (choix de la source avec le joueur).
+     - Piège de mesure : quand la fenêtre de Claude n'est pas visible (contrôle à distance), le navigateur bride
+       `requestAnimationFrame` (3 images/s). Mesurer le temps d'une image avec `update()` + `gl.readPixels`.
+     - Le créateur de joueur écrase sa colonne 3D à 0 px sous ~800 px de large (défaut de mise en page d'origine).
   3. Actions et tactiques une par une : **écrans** (« block » = écran pour le joueur) et pick and roll,
      alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers francs,
      chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.

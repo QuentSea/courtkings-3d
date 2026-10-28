@@ -1,3 +1,4 @@
 .netlify
 __pycache__/
 *.pyc
+_telechargements/

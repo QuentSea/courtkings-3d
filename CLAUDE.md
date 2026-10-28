@@ -126,7 +126,24 @@
      - ✅ `CourtScene` : parquet en lattes (`drawWoodPlanks`, graine fixe), `MeshPhysicalMaterial` vernis,
        panneaux LED, tribunes + ~880 spectateurs (2 `InstancedMesh`), écran géant (`updateScoreboard`, appelé par
        `updateScoreboardUI`), rampes de projecteurs. Coût mesuré : ~3 ms par image (≈330 images/s) en 5v5.
-     - À faire : personnages animés (choix de la source avec le joueur).
+     - ✅ Personnages animés Quaternius (CC0, crédits dans `assets/characters/CREDITS.txt`) :
+       - `assets/characters/` (~2,1 Mo) : `body_male.glb`, 5 coiffures/barbe (`hair_*.glb`), `animations.glb`
+         (11 clips). Préparés par un script gltf-transform + sharp (WebP, peau claire comme base, animations
+         triées) à partir des zips gratuits « [Standard] » téléchargés par le joueur dans `_telechargements/`
+         (exclu de Git). Le corps `.gltf` d'origine référence `T_Hair_1_Normal_png.png` et `T_Eye_Normal_png.png`
+         absents du zip : copier les fichiers sans `_png`.
+       - `CharacterAssets.js` : chargement (avant `new CourtKingsApp`, 20 s max) et analyse unique du squelette
+         (repère haut/avant/côté, redressement, taille 2 m) ; vêtements découpés dans le corps par os dominant
+         + hauteur, gonflés le long des normales (`buildClothing`) ; UV du maillot devant/dos (`jerseyUVs`).
+       - `AnimatedCharacter.js` : même interface que `CharacterMesh` (root, selectionRing, dribbleHand, animTime,
+         updateAnimation, updateConfig, disposeOwned). Animation choisie selon l'état + la vitesse mesurée ;
+         gestes de basket par `aimBone` (bras orientés vers une direction, mélangés à la pose).
+         Coiffures pack : buzz, fade_top, long, buns ; barbes pack : full_beard, stubble, goatee, chinstrap.
+         Les autres styles réutilisent `CharacterMesh.prototype.buildHair/buildBeard` posés sur l'os `Head`.
+       - `createCharacter.js` : `createCharacterMesh()` = animé si chargé, sinon ancien modèle.
+       - Mesuré : 10 joueurs animés en 5v5 ≈ 3,8 ms par image, 184 appels de dessin ; testé hôte + invité.
+       - À améliorer : crête et afro (formes simples), posture de défense très basse, bords du maillot aux
+         épaules un peu irréguliers, corps féminin non utilisé.
      - Piège de mesure : quand la fenêtre de Claude n'est pas visible (contrôle à distance), le navigateur bride
        `requestAnimationFrame` (3 images/s). Mesurer le temps d'une image avec `update()` + `gl.readPixels`.
      - Le créateur de joueur écrase sa colonne 3D à 0 px sous ~800 px de large (défaut de mise en page d'origine).

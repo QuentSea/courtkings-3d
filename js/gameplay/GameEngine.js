@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import { CHARACTER_PRESETS, GAME_MODES } from '../config/constants.js';
-import { CharacterMesh } from '../character/CharacterMesh.js';
+import { createCharacterMesh } from '../character/createCharacter.js';
 import { CourtScene } from '../court/CourtScene.js';
 import { ShotMeter } from './ShotMeter.js';
 import { setupRenderer } from '../render/RenderSetup.js';
@@ -194,6 +194,7 @@ export class GameEngine {
     startMatch(lobbyState, localPeerId) {
         for (const ent of this.entities.values()) {
             this.scene.remove(ent.mesh.root);
+            ent.mesh.disposeOwned?.();
         }
         this.entities.clear();
 
@@ -245,7 +246,7 @@ export class GameEngine {
 
     spawnPlayerEntity(id, team, isBot, isLocal, profile, slotIndex) {
         const meshConfig = { ...profile, team };
-        const charMesh = new CharacterMesh(meshConfig);
+        const charMesh = createCharacterMesh(meshConfig);
         this.scene.add(charMesh.root);
 
         if (isLocal && charMesh.selectionRing) {

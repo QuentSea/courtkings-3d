@@ -10,7 +10,8 @@
 import * as THREE from 'three';
 import { GAME_MODES, POSITIONS } from './config/constants.js';
 import { CharacterBuilder } from './character/CharacterBuilder.js';
-import { CharacterMesh } from './character/CharacterMesh.js';
+import { createCharacterMesh } from './character/createCharacter.js';
+import { loadCharacterAssets } from './character/CharacterAssets.js';
 import { NetworkManager } from './network/NetworkManager.js';
 import { GameEngine } from './gameplay/GameEngine.js';
 import { setupRenderer } from './render/RenderSetup.js';
@@ -329,12 +330,15 @@ class CourtKingsApp {
 
     rebuildLobby3DCharacters(players) {
         if (!this.lobbyScene) return;
-        this.lobbySceneMeshes.forEach(m => this.lobbyScene.remove(m.root));
+        this.lobbySceneMeshes.forEach(m => {
+            this.lobbyScene.remove(m.root);
+            m.disposeOwned?.();
+        });
         this.lobbySceneMeshes = [];
 
         const total = players.length;
         players.forEach((p, idx) => {
-            const mesh = new CharacterMesh({ ...p.profile, team: p.team });
+            const mesh = createCharacterMesh({ ...p.profile, team: p.team });
             // Resserrer quand il y a beaucoup de joueurs (jusqu'à 10) pour qu'ils tiennent tous à l'écran
             const spacing = Math.min(1.65, 11 / Math.max(total, 1));
             const offsetX = (idx - (total - 1) / 2) * spacing;
@@ -371,6 +375,16 @@ class CourtKingsApp {
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+    // Personnages animés (~2 Mo) chargés avant de construire les scènes ;
+    // en cas d'échec ou de lenteur (> 20 s), l'ancien modèle procédural est utilisé
+    try {
+        await Promise.race([
+            loadCharacterAssets(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('délai dépassé')), 20000))
+        ]);
+    } catch (err) {
+        console.warn('Personnages animés non chargés :', err);
+    }
     window.courtKingsApp = new CourtKingsApp();
 });

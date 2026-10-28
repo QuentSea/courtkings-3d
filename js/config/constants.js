@@ -29,7 +29,9 @@ export const HAIR_STYLES = [
     { id: 'fade_top', name: 'High-Top Fade' },
     { id: 'dreads', name: 'Locks / Dreadlocks' },
     { id: 'mohawk', name: 'Crête Streetball' },
-    { id: 'headband_curls', name: 'Boucles + Bandeau Pro' }
+    { id: 'headband_curls', name: 'Boucles + Bandeau Pro' },
+    { id: 'long', name: 'Cheveux Longs' },
+    { id: 'buns', name: 'Chignons' }
 ];
 
 export const BEARD_STYLES = [

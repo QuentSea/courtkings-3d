@@ -19,7 +19,7 @@ import {
     POSITIONS,
     CHARACTER_PRESETS
 } from '../config/constants.js';
-import { CharacterMesh } from './CharacterMesh.js';
+import { createCharacterMesh } from './createCharacter.js';
 import { setupRenderer } from '../render/RenderSetup.js';
 
 export class CharacterBuilder {
@@ -110,7 +110,7 @@ export class CharacterBuilder {
         this.scene.add(podiumGroup);
 
         // Personnage 3D
-        this.characterMesh = new CharacterMesh(this.profile);
+        this.characterMesh = createCharacterMesh(this.profile);
         this.scene.add(this.characterMesh.root);
 
         // Ballon 3D décoratif pour l'aperçu Dribble / Tir

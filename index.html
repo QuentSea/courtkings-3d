@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CourtKings 3D — Basketball Multijoueur (3v3, 4v4, 5v5)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,700;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./css/styles.css" />
+
+    <!-- PeerJS pour le salon multijoueur WebRTC en ligne sans configuration -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+    <!-- ImportMap ES Modules pour Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- BARRE DE NAVIGATION PRINCIPALE -->
+    <header class="top-navbar">
+        <div class="brand-logo">
+            <span class="logo-ball">🏀</span>
+            <span class="logo-text">COURTKINGS <span class="accent">3D</span></span>
+            <span class="version-pill">WEBGL • MULTIPLAYER</span>
+        </div>
+
+        <nav class="main-nav-tabs">
+            <button type="button" class="nav-tab active" data-nav-screen="builder">
+                1. CRÉATEUR DE JOUEUR (MYPLAYER)
+            </button>
+            <button type="button" class="nav-tab" data-nav-screen="lobby">
+                2. SALON MULTIJOUEUR (CODE AMIS)
+            </button>
+            <button type="button" class="nav-tab" data-nav-screen="match">
+                3. TERRAIN 3D (3v3 / 4v4 / 5v5)
+            </button>
+        </nav>
+
+        <div class="header-actions">
+            <button type="button" id="btn-quick-play" class="btn-primary-glow">
+                ⚡ JOUER MAINTENANT
+            </button>
+        </div>
+    </header>
+
+    <!-- =======================================================================
+         ÉCRAN 1 : CRÉATEUR DE PERSONNAGE 3D (CHARACTER BUILDER)
+         ======================================================================= -->
+    <section id="screen-builder" class="app-screen active">
+        <div class="builder-layout">
+            <!-- COLONNE GAUCHE : 10 PRESETS & APPARENCE MODULAIRE 3D -->
+            <aside class="builder-panel left-panel">
+                <div class="panel-section">
+                    <div class="section-header">
+                        <h2>10 PRESETS DE LÉGENDES</h2>
+                        <span class="section-tag">MODÈLES DE BASE</span>
+                    </div>
+                    <div id="preset-grid" class="preset-grid"></div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="section-header">
+                        <h2>IDENTITÉ & APPARENCE 3D</h2>
+                        <span class="section-tag">MODULAIRE</span>
+                    </div>
+
+                    <div class="form-row-two">
+                        <div class="form-group">
+                            <label for="player-name-input">Pseudonyme (Affiché en 3D)</label>
+                            <input type="text" id="player-name-input" maxlength="14" placeholder="Ex: Flash_PG" />
+                        </div>
+                        <div class="form-group num-group">
+                            <label for="player-number-input">N° Maillot</label>
+                            <input type="text" id="player-number-input" maxlength="2" placeholder="23" />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Teinte de Peau (7 nuances)</label>
+                        <div id="skin-tone-swatches" class="swatch-row"></div>
+                    </div>
+
+                    <div class="form-row-two">
+                        <div class="form-group">
+                            <label for="hair-style-select">Style de Coiffure 3D</label>
+                            <select id="hair-style-select"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="hair-color-select">Couleur Cheveux / Barbe</label>
+                            <select id="hair-color-select"></select>
+                        </div>
+                    </div>
+
+                    <div class="form-row-two">
+                        <div class="form-group">
+                            <label for="beard-style-select">Style de Barbe 3D</label>
+                            <select id="beard-style-select"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="jersey-color-select">Tenue / Maillot</label>
+                            <select id="jersey-color-select"></select>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- COLONNE CENTRALE : PRÉVISUALISATION 3D INTERACTIVE -->
+            <main class="builder-center-stage">
+                <div class="ovr-floating-card">
+                    <span class="ovr-label">NOTE GLOBALE</span>
+                    <span id="builder-ovr-value" class="ovr-number">80</span>
+                    <span class="ovr-sub">MYPLAYER BUILD</span>
+                </div>
+
+                <div id="builder-3d-viewport" class="viewport-3d-canvas"></div>
+
+                <div class="preview-controls-bar">
+                    <span class="hint-drag">🖱️ Glisser pour tourner le modèle 3D</span>
+                    <div class="anim-buttons">
+                        <button type="button" class="anim-btn active" data-preview-anim="IDLE">Posture</button>
+                        <button type="button" class="anim-btn" data-preview-anim="DRIBBLE">Dribble</button>
+                        <button type="button" class="anim-btn" data-preview-anim="CROSSOVER">Crossover</button>
+                        <button type="button" class="anim-btn" data-preview-anim="SHOOT">Tir Jump-Shot</button>
+                        <button type="button" class="anim-btn" data-preview-anim="DEFENSE">Défense</button>
+                    </div>
+                </div>
+            </main>
+
+            <!-- COLONNE DROITE : 5 POSTES (BUILDS) & RÉPARTITION DES 4 ATOUTS -->
+            <aside class="builder-panel right-panel">
+                <div class="panel-section">
+                    <div class="section-header">
+                        <h2>SYSTÈME DE POSTES (5 BUILDS)</h2>
+                        <span class="section-tag">TAILLE & PLAFONDS</span>
+                    </div>
+                    <div id="position-cards" class="position-cards-grid"></div>
+                    <div class="position-info-box">
+                        <p id="position-specialty-text" class="pos-spec"></p>
+                        <p id="position-bonuses-text" class="pos-bonus"></p>
+                    </div>
+                </div>
+
+                <div class="panel-section attributes-section">
+                    <div class="section-header">
+                        <h2>POINTS D'ATOUTS (ATTRIBUTS)</h2>
+                        <span id="remaining-points-badge" class="points-pool-badge">0 PTS DISPONIBLES</span>
+                    </div>
+
+                    <!-- 1. TIR (Shooting) -->
+                    <div class="attr-card">
+                        <div class="attr-top">
+                            <div>
+                                <span class="attr-title">🎯 TIR (SHOOTING)</span>
+                                <span id="cap-shooting" class="attr-cap">MAX 99</span>
+                            </div>
+                            <span id="val-shooting" class="attr-val">80</span>
+                        </div>
+                        <p class="attr-desc">Augmente la taille de la "Green Window" sur la jauge et la précision à 2 et 3 pts.</p>
+                        <div class="attr-bar-row">
+                            <button type="button" class="attr-step-btn" data-attr-minus="shooting">−</button>
+                            <div class="attr-slider-wrap">
+                                <div class="attr-progress-bg"><div id="fill-shooting" class="attr-progress-fill shoot-fill"></div></div>
+                                <input type="range" id="slider-shooting" min="60" max="99" value="80" />
+                            </div>
+                            <button type="button" class="attr-step-btn" data-attr-plus="shooting">+</button>
+                        </div>
+                    </div>
+
+                    <!-- 2. DÉFENSE (Defense) -->
+                    <div class="attr-card">
+                        <div class="attr-top">
+                            <div>
+                                <span class="attr-title">🛡️ DÉFENSE (DEFENSE)</span>
+                                <span id="cap-defense" class="attr-cap">MAX 99</span>
+                            </div>
+                            <span id="val-defense" class="attr-val">80</span>
+                        </div>
+                        <p class="attr-desc">Vitesse latérale, interceptions (Touche F) et contestation des tirs adverses.</p>
+                        <div class="attr-bar-row">
+                            <button type="button" class="attr-step-btn" data-attr-minus="defense">−</button>
+                            <div class="attr-slider-wrap">
+                                <div class="attr-progress-bg"><div id="fill-defense" class="attr-progress-fill def-fill"></div></div>
+                                <input type="range" id="slider-defense" min="60" max="99" value="80" />
+                            </div>
+                            <button type="button" class="attr-step-btn" data-attr-plus="defense">+</button>
+                        </div>
+                    </div>
+
+                    <!-- 3. DRIBBLE (Ball Handling) -->
+                    <div class="attr-card">
+                        <div class="attr-top">
+                            <div>
+                                <span class="attr-title">⚡ DRIBBLE (BALL HANDLING)</span>
+                                <span id="cap-dribble" class="attr-cap">MAX 99</span>
+                            </div>
+                            <span id="val-dribble" class="attr-val">80</span>
+                        </div>
+                        <p class="attr-desc">Vitesse avec ballon, crossovers éclairs (Touche C) et protection de balle.</p>
+                        <div class="attr-bar-row">
+                            <button type="button" class="attr-step-btn" data-attr-minus="dribble">−</button>
+                            <div class="attr-slider-wrap">
+                                <div class="attr-progress-bg"><div id="fill-dribble" class="attr-progress-fill drib-fill"></div></div>
+                                <input type="range" id="slider-dribble" min="60" max="99" value="80" />
+                            </div>
+                            <button type="button" class="attr-step-btn" data-attr-plus="dribble">+</button>
+                        </div>
+                    </div>
+
+                    <!-- 4. FINITION (Finishing) -->
+                    <div class="attr-card">
+                        <div class="attr-top">
+                            <div>
+                                <span class="attr-title">💥 FINITION (FINISHING)</span>
+                                <span id="cap-finishing" class="attr-cap">MAX 99</span>
+                            </div>
+                            <span id="val-finishing" class="attr-val">80</span>
+                        </div>
+                        <p class="attr-desc">Réussite des layups et dunks près du cercle même face à un défenseur.</p>
+                        <div class="attr-bar-row">
+                            <button type="button" class="attr-step-btn" data-attr-minus="finishing">−</button>
+                            <div class="attr-slider-wrap">
+                                <div class="attr-progress-bg"><div id="fill-finishing" class="attr-progress-fill fin-fill"></div></div>
+                                <input type="range" id="slider-finishing" min="60" max="99" value="80" />
+                            </div>
+                            <button type="button" class="attr-step-btn" data-attr-plus="finishing">+</button>
+                        </div>
+                    </div>
+
+                    <div class="attr-actions-row">
+                        <button type="button" id="btn-recommended-attrs" class="btn-secondary">
+                            Auto-Répartir (Build Pro)
+                        </button>
+                        <button type="button" id="btn-reset-attrs" class="btn-ghost">
+                            Réinitialiser
+                        </button>
+                    </div>
+                </div>
+
+                <button type="button" id="btn-save-character" class="btn-confirm-build">
+                    VALIDER LE JOUEUR & ALLER AU SALON MULTIJOUEUR →
+                </button>
+            </aside>
+        </div>
+    </section>
+
+    <!-- =======================================================================
+         ÉCRAN 2 : SALON MULTIJOUEUR EN LIGNE (LOBBY PAR CODE D'INVITATION)
+         ======================================================================= -->
+    <section id="screen-lobby" class="app-screen">
+        <div class="lobby-container">
+            <div class="lobby-top-bar">
+                <div class="room-code-box">
+                    <span class="rc-label">CODE DE SALON ACTIF</span>
+                    <span id="active-room-code" class="rc-code">BASKET-42</span>
+                    <button type="button" id="btn-copy-room-code" class="btn-small">COPIER LE CODE</button>
+                    <button type="button" id="btn-copy-invite-link" class="btn-small accent">COPIER LE LIEN RAPIDE</button>
+                    <button type="button" id="btn-create-room" class="btn-small">NOUVEAU SALON</button>
+                </div>
+
+                <div class="join-code-box">
+                    <input type="text" id="join-room-code-input" placeholder="Code ami (ex: BASKET-4K7Q)" maxlength="12" />
+                    <button type="button" id="btn-join-room" class="btn-primary-glow">REJOINDRE LE SALON</button>
+                </div>
+            </div>
+
+            <div class="lobby-mode-bar">
+                <div class="mode-pills">
+                    <button type="button" class="mode-pill active" data-mode-select="3v3">3v3 DEMI-TERRAIN (STREETBALL)</button>
+                    <button type="button" class="mode-pill" data-mode-select="4v4">4v4 DEMI-TERRAIN (PARK)</button>
+                    <button type="button" class="mode-pill" data-mode-select="5v5">5v5 TOUT-TERRAIN (PRO ARENA)</button>
+                </div>
+                <label class="bot-toggle">
+                    <input type="checkbox" id="toggle-fill-bots" checked />
+                    <span>Compléter les places vacantes avec des Bots IA</span>
+                </label>
+            </div>
+            <p id="lobby-mode-description" class="lobby-mode-desc"></p>
+
+            <!-- PRÉVISUALISATION 3D DU SALON & ÉQUIPES A / B -->
+            <div class="lobby-main-grid">
+                <div class="team-column team-a-col">
+                    <div class="team-col-header">
+                        <h3>ÉQUIPE A (BLEU)</h3>
+                        <button type="button" id="btn-join-team-a" class="btn-small">REJOINDRE ÉQUIPE A</button>
+                    </div>
+                    <div id="lobby-team-a-list" class="team-slots-list"></div>
+                </div>
+
+                <div class="lobby-3d-center">
+                    <div id="lobby-3d-viewport" class="lobby-3d-canvas"></div>
+                    <button type="button" id="btn-start-lobby-match" class="btn-launch-match">
+                        🏀 LANCER LE MATCH SUR LE PARQUET 3D
+                    </button>
+                </div>
+
+                <div class="team-column team-b-col">
+                    <div class="team-col-header">
+                        <h3>ÉQUIPE B (ROUGE)</h3>
+                        <button type="button" id="btn-join-team-b" class="btn-small">REJOINDRE ÉQUIPE B</button>
+                    </div>
+                    <div id="lobby-team-b-list" class="team-slots-list"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- =======================================================================
+         ÉCRAN 3 : GAMEPLAY 3D, JAUGE DE TIR & HUD (3v3 / 4v4 / 5v5)
+         ======================================================================= -->
+    <section id="screen-match" class="app-screen">
+        <!-- SCOREBOARD HUD EN HAUT -->
+        <div class="match-hud-top">
+            <div class="scoreboard-card">
+                <div class="team-score team-a">
+                    <span class="ts-name">ÉQUIPE A</span>
+                    <span id="hud-score-a" class="ts-points">0</span>
+                </div>
+                <div class="score-center">
+                    <span id="hud-mode-badge" class="hud-mode-pill">3v3</span>
+                    <span id="hud-rule-status" class="hud-possession">POSSESSION : ÉQUIPE A</span>
+                </div>
+                <div class="team-score team-b">
+                    <span id="hud-score-b" class="ts-points">0</span>
+                    <span class="ts-name">ÉQUIPE B</span>
+                </div>
+            </div>
+
+            <div class="match-quick-toolbar">
+                <span id="hud-gamepad-badge" class="hud-gamepad-pill">⌨️ CLAVIER / MANETTE</span>
+                <button type="button" class="hud-btn active" data-hud-mode="3v3">3v3 Half</button>
+                <button type="button" class="hud-btn" data-hud-mode="4v4">4v4 Half</button>
+                <button type="button" class="hud-btn" data-hud-mode="5v5">5v5 Full</button>
+                <button type="button" id="btn-hud-builder" class="hud-btn">Mon Joueur</button>
+                <button type="button" id="btn-hud-lobby" class="hud-btn">Salon</button>
+            </div>
+        </div>
+
+        <!-- BANNIÈRE D'ALERTE RÈGLES / GREEN RELEASE -->
+        <div id="court-rule-toast" class="court-rule-toast hidden">CHECK BALL !</div>
+        <div id="shot-feedback-banner" class="shot-feedback-banner hidden"></div>
+
+        <!-- JAUGE DE TIR 3D/UI (SHOT METER AVEC GREEN WINDOW) -->
+        <div id="shot-meter-widget" class="shot-meter-container hidden">
+            <div class="shot-meter-label">SHOT METER</div>
+            <div class="shot-meter-track">
+                <div id="shot-meter-fill" class="shot-meter-fill"></div>
+                <div id="shot-meter-green-zone" class="shot-meter-green-zone">
+                    <span>GREEN</span>
+                </div>
+                <div id="shot-meter-cursor" class="shot-meter-cursor"></div>
+            </div>
+        </div>
+
+        <!-- VIEWPORT 3D DU TERRAIN -->
+        <div id="match-3d-viewport" class="match-3d-canvas"></div>
+
+        <!-- AIDE CONTRÔLES EN BAS (CLAVIER & MANETTE) -->
+        <div class="controls-Overlay-bar">
+            <span><kbd>Stick G</kbd> / <kbd>ZQSD</kbd> Bouger & Viser Passe</span>
+            <span><kbd>A / ✕</kbd> / <kbd>E</kbd> Passer au joueur visé (Cercle Jaune)</span>
+            <span><kbd>X / ▢</kbd> / <kbd>Espace</kbd> Tirer (Green)</span>
+            <span><kbd>Y / △</kbd> / <kbd>Espace</kbd> / <kbd>R</kbd> Sauter / Contrer / Rebond</span>
+            <span><kbd>B / ◯</kbd> / <kbd>C / F</kbd> Crossover / Interception</span>
+            <span><kbd>R2 / Shift</kbd> Sprint</span>
+            <span><kbd>L2</kbd> Défense</span>
+        </div>
+    </section>
+
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>

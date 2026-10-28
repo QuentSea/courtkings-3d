@@ -75,11 +75,17 @@
   (0 image/s) ; l'afficher et mettre l'onglet de l'hôte devant.
 - **Codes de salon** (28 octobre 2026) : `BASKET-` + 4 caractères sans 0/O/1/I/L (~700 000 codes), pour ne pas
   croiser d'autres joueurs sur le serveur PeerJS public.
-- **Mise en ligne** (28 octobre 2026) : site Netlify `courtkings-3d` créé (id `deac86ea-0782-40bc-b641-9c3b2fe63959`,
-  `netlify.toml` : publication du dossier tel quel, sans build). Node.js 24 LTS installé (winget) pour `npx`.
-  **Publication refusée par Netlify : « account credit usage exceeded »** (crédits gratuits du compte épuisés).
-  Le site est aussi réglé « connexion à l'équipe Netlify obligatoire » sur toutes les versions : à passer en
-  « hors production seulement » avant de partager le lien.
+- **En ligne sur GitHub Pages** (28 octobre 2026) : **https://quentsea.github.io/courtkings-3d/**
+  - Dépôt public `QuentSea/courtkings-3d` (branche `main`, racine publiée telle quelle). Ce dossier est un dépôt
+    Git (identité locale `QuentSea` + adresse noreply GitHub). Git, GitHub CLI et Node.js 24 installés via winget
+    (`C:\Program Files\Git\cmd\git.exe`, `C:\Program Files\GitHub CLI\gh.exe`).
+  - **Mettre à jour le jeu en ligne** : commit puis `git push` ; GitHub Pages republie en ~1 min
+    (suivi : `gh api repos/QuentSea/courtkings-3d/pages/builds/latest --jq .status`).
+  - Testé en ligne : invité branché **uniquement par PeerJS** (BroadcastChannel coupé) → salon, match, panier
+    2-0 et remise en jeu identiques des deux côtés, aucune erreur.
+  - Le lien rapide du salon prend l'adresse de la page (`origin + pathname`) : il marche tel quel en ligne.
+- **Netlify abandonné** : site `courtkings-3d` créé mais vide (publication refusée : crédits du compte épuisés).
+  `netlify.toml` reste dans le dossier, sans effet sur GitHub Pages.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

@@ -97,6 +97,16 @@
     dans un onglet) → 10 joueurs 5/5, 11e refusé, 3v3 → 5v5 avec 10 humains, ~18 états/s reçus par chacun,
     hôte à 145 images/s, départ en match remplacé par l'IA, aucune erreur. Ouvrir 10 onglets 3D sature le
     navigateur intégré (contextes WebGL) : utiliser des invités simulés.
+- **5v5 tout-terrain** (28 octobre 2026) : le jeu des deux côtés existait déjà (A attaque au nord, B au sud,
+  transitions des bots), mais la caméra regardait toujours le nord : en défense, l'action était derrière elle.
+  - `getCameraFocusHoop` : en tout-terrain, la caméra (2K et Suivi) regarde le panier attaqué par l'équipe qui a
+    le ballon. `viewFlipped` (caméra tournée vers +Z) inverse clavier et sticks : « haut » = haut de l'écran.
+  - Mi-temps : `checkHalftime` (hôte, après chaque panier) → à `ceil(targetScore / 2)` = 15 pts en 5v5,
+    `matchRules.sidesSwapped` = vrai, les équipes changent de panier (`getAttackingHoopForTeam`), message
+    « MI-TEMPS » à la remise en jeu. Places de remise en jeu retournées selon le panier attaqué (`mirror`).
+    `sidesSwapped` est dans `WORLD_STATE`, appliqué avant la remise en jeu chez l'invité.
+  - Testé (hôte + invité) : caméra et « haut » retournés quand B attaque, mi-temps à 15-0 identique des deux
+    côtés. Pas de fin de match : `targetScore` (21 / 30) ne sert qu'à la mi-temps.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

@@ -66,12 +66,17 @@ export class GameEngine {
             possessionTeam: 'A',
             needsTakeBack: false,
             isCheckBall: false,
-            checkBallSeq: 0 // incrémenté à chaque remise en jeu : l'invité se replace quand il change
+            checkBallSeq: 0, // incrémenté à chaque remise en jeu : l'invité se replace quand il change
+            sidesSwapped: false // tout-terrain : vrai après la mi-temps (A attaque au sud, B au nord)
         };
+        this.pendingHalftimeAlert = false;
 
         // Messages à l'écran de l'hôte, recopiés chez les invités
         this.alertSeq = 0;
         this.lastAlertText = '';
+
+        this.cameraForward = new THREE.Vector3();
+        this.viewFlipped = false;
 
         this.keys = {};
         this.crossoverCooldown = 0;
@@ -483,6 +488,8 @@ export class GameEngine {
         this.matchRules.shotClock = 24;
         this.matchRules.possessionTeam = 'A';
         this.matchRules.needsTakeBack = false;
+        this.matchRules.sidesSwapped = false;
+        this.pendingHalftimeAlert = false;
 
         const playersPerTeam = this.currentMode.playersPerTeam;
         const humanPlayers = Object.values(lobbyState.players || {});
@@ -566,7 +573,21 @@ export class GameEngine {
         if (this.currentMode.isHalfCourt) {
             return this.court.getTargetHoop('NORTH');
         }
-        return this.court.getTargetHoop(team === 'A' ? 'NORTH' : 'SOUTH');
+        const attacksNorth = (team === 'A') !== this.matchRules.sidesSwapped;
+        return this.court.getTargetHoop(attacksNorth ? 'NORTH' : 'SOUTH');
+    }
+
+    /**
+     * Tout-terrain : à la moitié du score à atteindre (15 pts en 5v5), les équipes changent de panier.
+     * Appelé par l'hôte après chaque panier, avant la remise en jeu.
+     */
+    checkHalftime() {
+        if (this.currentMode.isHalfCourt || this.matchRules.sidesSwapped) return;
+        const half = Math.ceil((this.currentMode.targetScore || 30) / 2);
+        if (Math.max(this.matchRules.scoreA, this.matchRules.scoreB) >= half) {
+            this.matchRules.sidesSwapped = true;
+            this.pendingHalftimeAlert = true;
+        }
     }
 
     /**
@@ -598,11 +619,13 @@ export class GameEngine {
         let offIdx = 0;
         let defIdx = 0;
         let ballCarrier = null;
+        // Les places sont prévues pour une attaque vers le nord : les retourner si l'attaque va vers le sud
+        const mirror = !isHalf && this.getAttackingHoopForTeam(offenseTeam).side === 'SOUTH';
 
         for (const ent of this.entities.values()) {
             if (ent.team === offenseTeam) {
                 const spot = offenseSpots[offIdx % offenseSpots.length].clone();
-                if (!isHalf && offenseTeam === 'B') spot.z *= -1;
+                if (mirror) spot.z *= -1;
                 ent.pos.copy(spot);
                 ent.slotIndex = offIdx;
                 // Même porteur dans tous les onglets : le 1er de l'équipe (ordre du salon, identique partout)
@@ -612,7 +635,7 @@ export class GameEngine {
                 offIdx++;
             } else {
                 const spot = defenseSpots[defIdx % defenseSpots.length].clone();
-                if (!isHalf && offenseTeam === 'B') spot.z *= -1;
+                if (mirror) spot.z *= -1;
                 ent.pos.copy(spot);
                 ent.slotIndex = defIdx;
                 defIdx++;
@@ -627,7 +650,12 @@ export class GameEngine {
         if (ballCarrier) {
             this.giveBallTo(ballCarrier.id, false);
         }
-        this.showRuleAlert(`CHECK BALL — POSSESSION ÉQUIPE ${offenseTeam}`);
+        if (this.pendingHalftimeAlert) {
+            this.pendingHalftimeAlert = false;
+            this.showRuleAlert(`⏱️ MI-TEMPS : CHANGEMENT DE CÔTÉ ! — POSSESSION ÉQUIPE ${offenseTeam}`);
+        } else {
+            this.showRuleAlert(`CHECK BALL — POSSESSION ÉQUIPE ${offenseTeam}`);
+        }
         this.updateScoreboardUI();
     }
 
@@ -1222,9 +1250,14 @@ export class GameEngine {
             moveZ = padInput.moveZ;
         }
 
+        // Commandes relatives à l'écran : si la caméra regarde vers le sud, haut/bas et gauche/droite s'inversent
+        const flip = this.viewFlipped ? -1 : 1;
+        moveX *= flip;
+        moveZ *= flip;
+
         // Si le joueur oriente le Stick Droit de la manette, cela oriente en priorité la visée de passe
         if (padInput && (padInput.rightStickX !== 0 || padInput.rightStickZ !== 0)) {
-            this.aimDirection.set(padInput.rightStickX, padInput.rightStickZ).normalize();
+            this.aimDirection.set(padInput.rightStickX * flip, padInput.rightStickZ * flip).normalize();
         } else if (moveX !== 0 || moveZ !== 0) {
             this.aimDirection.set(moveX, moveZ).normalize();
         }
@@ -1619,6 +1652,7 @@ export class GameEngine {
                 this.shotMeter.showFeedback(isPoster ? 'POSTER DUNK !' : 'SLAM DUNK !', Math.round(contest * 100), 'feedback-green', true);
             }
             this.updateScoreboardUI();
+            this.checkHalftime();
 
             const nextTeam = dunker.team === 'A' ? 'B' : 'A';
             setTimeout(() => {
@@ -1661,6 +1695,7 @@ export class GameEngine {
                 : '🏀 PANIER À 2 POINTS (DANS LE CERCLE : +2 PTS) !';
             this.showRuleAlert(`${label} (${outcome.shooterName})`);
             this.updateScoreboardUI();
+            this.checkHalftime();
 
             const nextTeam = outcome.shooterTeam === 'A' ? 'B' : 'A';
             setTimeout(() => {
@@ -1677,13 +1712,23 @@ export class GameEngine {
         }
     }
 
+    /**
+     * Panier vers lequel regarde la caméra : en tout-terrain, celui qu'attaque l'équipe qui a le ballon
+     * (l'action), pour ne jamais tourner le dos au jeu quand on défend
+     */
+    getCameraFocusHoop(me) {
+        if (this.currentMode.isHalfCourt) return this.getAttackingHoopForTeam(me.team);
+        return this.getAttackingHoopForTeam(this.matchRules.possessionTeam);
+    }
+
     updateCamera() {
         const me = this.getLocalEntity();
         if (!me) return;
 
+        const hoop = this.getCameraFocusHoop(me);
+        const dirZ = hoop.side === 'NORTH' ? 1 : -1;
+
         if (this.cameraMode === '2K') {
-            const hoop = this.getAttackingHoopForTeam(me.team);
-            const dirZ = hoop.side === 'NORTH' ? 1 : -1;
             const targetCamPos = new THREE.Vector3(
                 me.pos.x * 0.45,
                 7.6,
@@ -1697,10 +1742,14 @@ export class GameEngine {
             );
             this.camera.lookAt(lookTarget);
         } else {
-            const targetCamPos = new THREE.Vector3(me.pos.x, 4.2, me.pos.z + 6.2);
+            const targetCamPos = new THREE.Vector3(me.pos.x, 4.2, me.pos.z + dirZ * 6.2);
             this.camera.position.lerp(targetCamPos, 0.1);
-            this.camera.lookAt(me.pos.x, 1.5, me.pos.z - 2.5);
+            this.camera.lookAt(me.pos.x, 1.5, me.pos.z - dirZ * 2.5);
         }
+
+        // Caméra tournée vers le sud (+Z) : les touches et le stick s'inversent pour rester « haut = haut de l'écran »
+        this.camera.getWorldDirection(this.cameraForward);
+        this.viewFlipped = this.cameraForward.z > 0;
     }
 
     handleRemotePlayerState(packet) {
@@ -1757,7 +1806,8 @@ export class GameEngine {
                 scoreB: this.matchRules.scoreB,
                 possessionTeam: this.matchRules.possessionTeam,
                 needsTakeBack: this.matchRules.needsTakeBack,
-                checkBallSeq: this.matchRules.checkBallSeq
+                checkBallSeq: this.matchRules.checkBallSeq,
+                sidesSwapped: this.matchRules.sidesSwapped
             },
             alert: { seq: this.alertSeq, text: this.lastAlertText }
         };
@@ -1779,6 +1829,8 @@ export class GameEngine {
 
         // Remise en jeu chez l'hôte : se replacer aussi (y compris son propre joueur)
         const rules = packet.rules;
+        // Côtés d'abord : la remise en jeu ci-dessous place les joueurs selon le panier attaqué
+        if (rules) this.matchRules.sidesSwapped = !!rules.sidesSwapped;
         if (rules && rules.checkBallSeq !== this.matchRules.checkBallSeq) {
             this.resetPositionsForCheckBall(rules.possessionTeam);
             this.matchRules.checkBallSeq = rules.checkBallSeq;

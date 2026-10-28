@@ -1,9 +1,0 @@
-# Site statique : pas de build, le dossier est publié tel quel
-[build]
-  publish = "."
-
-# Comme server.py en local : toujours servir la dernière version du jeu
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Cache-Control = "no-cache"

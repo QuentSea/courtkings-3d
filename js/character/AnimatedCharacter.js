@@ -14,6 +14,7 @@ import { POSITIONS } from '../config/constants.js';
 import { CharacterAssets } from './CharacterAssets.js';
 import { CharacterMesh } from './CharacterMesh.js';
 import { asColorTexture } from '../render/RenderSetup.js';
+import { buildProceduralHair, HAIR_BASE_FROM_PACK } from './HairStyles.js';
 
 // Coiffures et barbes du pack ; les autres styles reprennent les formes de l'ancien modèle
 const PACK_HAIR_BY_STYLE = {
@@ -37,6 +38,9 @@ const CLIPS = {
     crouchMove: 'Crouch_Fwd_Loop',
     air: 'Jump_Loop'
 };
+const LOCOMOTION = new Set(['jog', 'sprint', 'crouchMove']);
+// Part de l'accroupi du pack dans la posture de défense (1 = accroupi complet, trop bas)
+const DEFENSE_CROUCH = 0.3;
 
 export class AnimatedCharacter {
     constructor(config = {}) {
@@ -161,7 +165,7 @@ export class AnimatedCharacter {
             const clip = CharacterAssets.clips[name];
             if (clip) this.actions[key] = this.mixer.clipAction(clip);
         }
-        this.currentAction = null;
+        this.blendWeights = null;
         this.playAction('idle', 0);
         this.mixer.update(Math.random() * 2); // décaler les joueurs pour qu'ils ne bougent pas en même temps
 
@@ -200,22 +204,33 @@ export class AnimatedCharacter {
             return meshes.length > 0;
         };
 
-        const hairPack = PACK_HAIR_BY_STYLE[this.config.hairStyle];
+        const style = this.config.hairStyle;
+        const hairPack = PACK_HAIR_BY_STYLE[style] || HAIR_BASE_FROM_PACK[style];
         const beardPack = PACK_BEARD_BY_STYLE[this.config.beardStyle];
         const hairDone = hairPack ? attachPack(hairPack) : false;
         const beardDone = beardPack ? attachPack(beardPack) : false;
 
-        // Styles sans équivalent dans le pack : formes de l'ancien modèle, posées sur l'os de la tête
-        const needHair = !hairDone && this.config.hairStyle !== 'bald' && !hairPack;
+        // Styles sans équivalent dans le pack : coiffures fabriquées (HairStyles), sinon formes de
+        // l'ancien modèle, posées sur l'os de la tête
+        const hairMat = new THREE.MeshStandardMaterial({ color: hairHex, roughness: 0.85 });
+        this.disposables.push(hairMat);
+        const procedural = buildProceduralHair(style, hairMat, accentColor);
+        const needHair = !procedural && !hairDone && style !== 'bald' && !PACK_HAIR_BY_STYLE[style];
         const needBeard = !beardDone && this.config.beardStyle !== 'none' && !beardPack;
-        if (!needHair && !needBeard) return;
+        if (!procedural && !needHair && !needBeard) return;
 
         const headGroup = new THREE.Group();
         headGroup.matrixAutoUpdate = false;
         headGroup.matrix.copy(tpl.headAttach);
-        const hairMat = new THREE.MeshStandardMaterial({ color: hairHex, roughness: 0.75 });
-        this.disposables.push(hairMat);
         const legacy = { config: this.config };
+        if (procedural) {
+            procedural.traverse(o => {
+                if (!o.isMesh) return;
+                this.disposables.push(o.geometry);
+                if (o.userData.ownMaterial) this.disposables.push(o.userData.ownMaterial);
+            });
+            headGroup.add(procedural);
+        }
         if (needHair) {
             // Les coiffures de l'ancien modèle descendaient sur les yeux : on les remonte un peu
             const hairGroup = new THREE.Group();
@@ -260,13 +275,52 @@ export class AnimatedCharacter {
         return tex;
     }
 
+    /**
+     * Mélange voulu des animations, ex. { crouchIdle: 0.55, idle: 0.45 } (total = 1) ; les poids
+     * réels y glissent en douceur dans blendActions
+     */
     playAction(key, fade = 0.18) {
-        const action = this.actions[key];
-        if (!action || action === this.currentAction) return;
-        action.reset().setEffectiveWeight(1).fadeIn(fade).play();
-        if (this.currentAction) this.currentAction.fadeOut(fade);
-        this.currentAction = action;
-        this.currentKey = key;
+        this.playBlend({ [key]: 1 }, fade);
+    }
+
+    playBlend(targets, fade = 0.18) {
+        this.blendTargets = targets;
+        this.blendFade = fade;
+        if (!this.blendWeights) {
+            // Première pose : directement à la cible
+            this.blendWeights = { ...targets };
+            this.blendActions(0);
+        }
+    }
+
+    blendActions(dt) {
+        const rate = this.blendFade > 0 ? Math.min(1, dt / this.blendFade * 2.5) : 1;
+        let leader = null;
+        for (const [key, action] of Object.entries(this.actions)) {
+            const target = this.blendTargets[key] || 0;
+            const w = (this.blendWeights[key] || 0) + (target - (this.blendWeights[key] || 0)) * (dt > 0 ? rate : 1);
+            this.blendWeights[key] = w;
+            if (w > 0.002) {
+                if (!action.isRunning()) action.reset().play();
+                action.setEffectiveWeight(w);
+                if (LOCOMOTION.has(key) && (!leader || target > (this.blendTargets[leader] || 0))) leader = key;
+            } else if (action.isRunning()) {
+                action.stop();
+                this.blendWeights[key] = 0;
+            }
+        }
+        // Les animations de déplacement mélangées gardent le même rythme de pas
+        if (leader) {
+            const lead = this.actions[leader];
+            const phase = lead.time / lead.getClip().duration;
+            for (const key of LOCOMOTION) {
+                const a = this.actions[key];
+                if (key === leader || !a?.isRunning()) continue;
+                const dur = a.getClip().duration;
+                a.time = phase * dur;
+                a.timeScale = lead.timeScale * dur / lead.getClip().duration;
+            }
+        }
     }
 
     updateConfig(newConfig) {
@@ -294,14 +348,20 @@ export class AnimatedCharacter {
 
         let key = moving ? 'jog' : 'idle';
         if (state === 'RUN') key = this.speed > 5.2 ? 'sprint' : 'jog';
-        else if (state === 'DEFENSE') key = moving ? 'crouchMove' : 'crouchIdle';
         else if (state === 'SHOOT' || state === 'CONTEST' || state === 'DUNK') key = 'air';
-        this.playAction(key, key === 'air' ? 0.1 : 0.2);
-
-        if (this.currentAction) {
-            const ref = key === 'sprint' ? 6.5 : key === 'jog' || key === 'crouchMove' ? 3.6 : 0;
-            this.currentAction.timeScale = ref ? THREE.MathUtils.clamp(this.speed / ref, 0.6, 1.6) : 1;
+        if (state === 'DEFENSE') {
+            // Posture de défense : l'accroupi du pack mélangé avec la pose debout (genoux fléchis, dos droit)
+            this.playBlend(moving ? { crouchMove: DEFENSE_CROUCH, jog: 1 - DEFENSE_CROUCH }
+                : { crouchIdle: DEFENSE_CROUCH, idle: 1 - DEFENSE_CROUCH }, 0.2);
+        } else {
+            this.playAction(key, key === 'air' ? 0.1 : 0.2);
         }
+
+        for (const [k, action] of Object.entries(this.actions)) {
+            const ref = k === 'sprint' ? 6.5 : k === 'jog' || k === 'crouchMove' ? 3.6 : 0;
+            action.timeScale = ref ? THREE.MathUtils.clamp(this.speed / ref, 0.6, 1.6) : 1;
+        }
+        this.blendActions(dt);
         this.mixer.update(dt);
 
         this.applyBasketballGestures(dt, state);
@@ -334,7 +394,8 @@ export class AnimatedCharacter {
             return { plusX: [v(0.15, 1, 0.2), v(0.05, 1, 0.1)], minusX: [v(-0.15, 1, 0.2), v(-0.05, 1, 0.1)] };
         }
         if (state === 'DEFENSE') {
-            return { plusX: [v(1, -0.1, 0.35), v(0.55, 0.55, 0.45)], minusX: [v(-1, -0.1, 0.35), v(-0.55, 0.55, 0.45)] };
+            // Une main haute (contre le tir), une main basse et écartée (contre le dribble)
+            return { plusX: [v(1, 0.05, 0.3), v(0.75, 0.6, 0.35)], minusX: [v(-1, -0.4, 0.35), v(-0.85, -0.25, 0.6)] };
         }
         return null;
     }

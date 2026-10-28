@@ -147,89 +147,133 @@ function analyzeBody(scene) {
 }
 
 /**
- * Découpe les vêtements dans la géométrie du corps : chaque sommet est classé selon l'os qui le
- * fait le plus bouger et sa hauteur ; les triangles retenus sont légèrement gonflés vers l'extérieur.
+ * Découpe les vêtements dans la géométrie du corps (au repos, bras à l'horizontale). Chaque pièce
+ * est une zone définie par une fonction f (f < 0 = dans la pièce, mesurée en tailles de personnage) :
+ * emmanchures avec bretelles, encolure ronde, ourlets droits. Les triangles à cheval sur le bord
+ * sont coupés exactement le long de la courbe, puis la pièce est gonflée vers l'extérieur.
  */
 function buildClothing(geo, frame) {
-    const { up, fwd, lat, height, boneIndex, bindPos } = frame;
+    const { up, fwd, lat, height, bindPos } = frame;
     const pos = geo.attributes.position;
-    const nrm = geo.attributes.normal;
-    const si = geo.attributes.skinIndex;
-    const sw = geo.attributes.skinWeight;
     const count = pos.count;
 
-    const h = (v) => v.dot(up);
-    const hipH = h(bindPos('thigh_l'));
-    const kneeH = h(bindPos('calf_l'));
-    const ankleH = h(bindPos('foot_l'));
-    const waistH = h(bindPos('spine_01'));
-    const neckH = h(bindPos('neck_01'));
+    const H = height;
+    const hb = (name) => bindPos(name).dot(up) / H;
+    const kneeY = hb('calf_l');
+    const ankleY = hb('foot_l');
+    const waistY = hb('spine_01');
+    const neckY = hb('neck_01');
+    const shoulder = bindPos('upperarm_l');
+    const shoulderX = Math.abs(shoulder.dot(lat)) / H;
+    const shoulderY = shoulder.dot(up) / H;
+    const neckZ = bindPos('neck_01').dot(fwd) / H;
 
-    const ids = (names) => new Set(names.map(n => boneIndex[n]).filter(i => i !== undefined));
-    const torsoBones = ids(['spine_01', 'spine_02', 'spine_03', 'clavicle_l', 'clavicle_r']);
-    const hipBones = ids(['pelvis', 'thigh_l', 'thigh_r', 'spine_01']);
-    const pelvisBone = boneIndex.pelvis;
-    const calfBones = ids(['calf_l', 'calf_r']);
-    const footBones = ids(['foot_l', 'foot_r', 'ball_l', 'ball_r', 'ball_leaf_l', 'ball_leaf_r']);
-
-    const dom = new Int32Array(count);
-    const vh = new Float32Array(count);
+    // Coordonnées de chaque sommet en tailles de personnage : x côté, y hauteur, z vers l'avant
+    const X = new Float32Array(count), Y = new Float32Array(count), Z = new Float32Array(count);
     const p = new THREE.Vector3();
     for (let i = 0; i < count; i++) {
-        let best = 0;
-        for (let k = 1; k < 4; k++) if (sw.getComponent(i, k) > sw.getComponent(i, best)) best = k;
-        dom[i] = si.getComponent(i, best);
-        vh[i] = h(p.fromBufferAttribute(pos, i));
+        p.fromBufferAttribute(pos, i);
+        X[i] = p.dot(lat) / H;
+        Y[i] = p.dot(up) / H;
+        Z[i] = p.dot(fwd) / H;
     }
 
-    const regions = {
-        jersey: (i) => vh[i] < neckH - 0.01 * height &&
-            (torsoBones.has(dom[i]) || (dom[i] === pelvisBone && vh[i] > waistH - 0.02 * height)),
-        shorts: (i) => hipBones.has(dom[i]) && vh[i] > kneeH + 0.035 * height && vh[i] < waistH + 0.035 * height,
-        socks: (i) => (calfBones.has(dom[i]) || footBones.has(dom[i])) && vh[i] < ankleH + 0.4 * (kneeH - ankleH),
-        shoes: (i) => footBones.has(dom[i]) || (calfBones.has(dom[i]) && vh[i] < ankleH + 0.03 * height)
+    const armholeX = shoulderX + 0.013;
+    const zones = {
+        jersey: (i) => {
+            const ax = Math.abs(X[i]);
+            // Emmanchure : ellipse autour de l'épaule (le haut de l'épaule reste nu, bretelle à l'intérieur)
+            const r = Math.hypot((ax - armholeX) / 0.065, (Y[i] - shoulderY) / 0.085);
+            const arm = Math.max(0.05 * (1 - r), ax - armholeX);
+            // Encolure : ellipsoïde autour du cou, plus profonde devant
+            const rn = Math.hypot(X[i] / 0.048, (Y[i] - (neckY + 0.006)) / 0.055, (Z[i] - (neckZ + 0.02)) / 0.075);
+            const neck = 0.05 * (1 - rn);
+            return Math.max(waistY - 0.02 - Y[i], Y[i] - (neckY + 0.015), arm, neck);
+        },
+        shorts: (i) => Math.max(kneeY + 0.035 - Y[i], Y[i] - (waistY + 0.035)),
+        socks: (i) => Y[i] - (ankleY + 0.4 * (kneeY - ankleY)),
+        shoes: (i) => Y[i] - (ankleY + 0.03)
     };
     const inflate = { jersey: 0.011, shorts: 0.022, socks: 0.003, shoes: 0.02 };
-    // Maillot et short : triangle gardé seulement si ses 3 sommets sont dans la zone (bords nets) ;
-    // chaussures : 2 sur 3 suffisent (elles recouvrent le bas des chaussettes, sans trou)
-    const minVerts = { jersey: 3, shorts: 3, socks: 3, shoes: 2 };
 
     const index = geo.index ? geo.index.array : Array.from({ length: count }, (_, i) => i);
     const out = {};
-    for (const name of Object.keys(regions)) {
-        const keep = regions[name];
-        const tris = [];
-        for (let t = 0; t < index.length; t += 3) {
-            const a = index[t], b = index[t + 1], c = index[t + 2];
-            if ((keep(a) ? 1 : 0) + (keep(b) ? 1 : 0) + (keep(c) ? 1 : 0) >= minVerts[name]) tris.push(a, b, c);
-        }
-        out[name] = makePiece(tris, geo, inflate[name] * height, name === 'jersey' ? { up, fwd, lat } : null);
+    for (const name of Object.keys(zones)) {
+        const f = new Float32Array(count);
+        for (let i = 0; i < count; i++) f[i] = zones[name](i);
+        const verts = clipTriangles(index, f);
+        out[name] = makePiece(verts, geo, inflate[name] * H, name === 'jersey' ? { up, fwd, lat } : null);
     }
     return out;
 }
 
-function makePiece(tris, geo, offset, jerseyFrame) {
+/**
+ * Garde la partie f < 0 de chaque triangle. Renvoie une liste de sommets (3 par triangle), chacun
+ * étant un mélange de deux sommets du corps : { a, b, t } (t = part de b)
+ */
+function clipTriangles(index, f) {
+    const out = [];
+    const poly = [];
+    for (let t = 0; t < index.length; t += 3) {
+        const tri = [index[t], index[t + 1], index[t + 2]];
+        const inside = tri.map(i => f[i] < 0);
+        const n = inside.filter(Boolean).length;
+        if (n === 0) continue;
+        if (n === 3) {
+            for (const i of tri) out.push({ a: i, b: i, t: 0 });
+            continue;
+        }
+        poly.length = 0;
+        for (let k = 0; k < 3; k++) {
+            const i = tri[k], j = tri[(k + 1) % 3];
+            if (inside[k]) poly.push({ a: i, b: i, t: 0 });
+            if (inside[k] !== inside[(k + 1) % 3]) {
+                // Toujours calculé dans le même sens pour qu'une arête partagée soit coupée au même point
+                const [lo, hi] = i < j ? [i, j] : [j, i];
+                poly.push({ a: lo, b: hi, t: f[lo] / (f[lo] - f[hi]) });
+            }
+        }
+        for (let k = 1; k + 1 < poly.length; k++) out.push(poly[0], poly[k], poly[k + 1]);
+    }
+    return out;
+}
+
+function makePiece(verts, geo, offset, jerseyFrame) {
     const pos = geo.attributes.position;
     const nrm = geo.attributes.normal;
     const si = geo.attributes.skinIndex;
     const sw = geo.attributes.skinWeight;
-    const n = tris.length;
+    const n = verts.length;
     const positions = new Float32Array(n * 3);
     const normals = new Float32Array(n * 3);
     const skinIndex = new Uint16Array(n * 4);
     const skinWeight = new Float32Array(n * 4);
     const p = new THREE.Vector3();
     const q = new THREE.Vector3();
+    const p2 = new THREE.Vector3();
+    const q2 = new THREE.Vector3();
+    const weights = new Map();
     for (let k = 0; k < n; k++) {
-        const i = tris[k];
-        p.fromBufferAttribute(pos, i);
-        q.fromBufferAttribute(nrm, i);
+        const { a, b, t } = verts[k];
+        p.fromBufferAttribute(pos, a).lerp(p2.fromBufferAttribute(pos, b), t);
+        q.fromBufferAttribute(nrm, a).lerp(q2.fromBufferAttribute(nrm, b), t).normalize();
         p.addScaledVector(q, offset);
         p.toArray(positions, k * 3);
         q.toArray(normals, k * 3);
+        // Poids des os mélangés entre les deux sommets, 4 plus forts gardés
+        weights.clear();
+        for (const [i, w] of [[a, 1 - t], [b, t]]) {
+            if (w <= 0) continue;
+            for (let c = 0; c < 4; c++) {
+                const bone = si.getComponent(i, c);
+                weights.set(bone, (weights.get(bone) || 0) + w * sw.getComponent(i, c));
+            }
+        }
+        const best = [...weights].sort((x, y) => y[1] - x[1]).slice(0, 4);
+        const total = best.reduce((s, e) => s + e[1], 0) || 1;
         for (let c = 0; c < 4; c++) {
-            skinIndex[k * 4 + c] = si.getComponent(i, c);
-            skinWeight[k * 4 + c] = sw.getComponent(i, c);
+            skinIndex[k * 4 + c] = best[c] ? best[c][0] : 0;
+            skinWeight[k * 4 + c] = best[c] ? best[c][1] / total : 0;
         }
     }
     const out = new THREE.BufferGeometry();

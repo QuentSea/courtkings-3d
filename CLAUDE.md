@@ -92,7 +92,7 @@
     2-0 et remise en jeu identiques des deux côtés, aucune erreur.
   - Le lien rapide du salon prend l'adresse de la page (`origin + pathname`) : il marche tel quel en ligne.
 - **Netlify abandonné** : site `courtkings-3d` créé mais vide (publication refusée : crédits du compte épuisés).
-  `netlify.toml` reste dans le dossier, sans effet sur GitHub Pages.
+  `netlify.toml` et `.netlify/` envoyés à la Corbeille le 28 octobre 2026 avec l'accord du joueur.
 - **Jusqu'à 10 joueurs** (28 octobre 2026), réseau en étoile : chaque invité n'est relié qu'à l'hôte (PeerJS).
   - `MAX_PER_TEAM = 5` (`NetworkManager`) : le 11e reçoit `ROOM_FULL` ; passage dans une équipe pleine refusé
     (en local et par l'hôte). Seul l'hôte peut lancer (`startMatch`), et il monte le mode si besoin
@@ -130,23 +130,33 @@
        - `assets/characters/` (~2,1 Mo) : `body_male.glb`, 5 coiffures/barbe (`hair_*.glb`), `animations.glb`
          (11 clips). Préparés par un script gltf-transform + sharp (WebP, peau claire comme base, animations
          triées) à partir des zips gratuits « [Standard] » téléchargés par le joueur dans `_telechargements/`
-         (exclu de Git). Le corps `.gltf` d'origine référence `T_Hair_1_Normal_png.png` et `T_Eye_Normal_png.png`
-         absents du zip : copier les fichiers sans `_png`.
+         (exclu de Git ; seuls les 2 zips y sont gardés, les copies décompressées sont parties à la Corbeille le
+         28 octobre 2026 : les redécompresser pour refaire les fichiers). Le corps `.gltf` d'origine référence
+         `T_Hair_1_Normal_png.png` et `T_Eye_Normal_png.png` absents du zip : copier les fichiers sans `_png`.
        - `CharacterAssets.js` : chargement (avant `new CourtKingsApp`, 20 s max) et analyse unique du squelette
-         (repère haut/avant/côté, redressement, taille 2 m) ; vêtements découpés dans le corps par os dominant
-         + hauteur, gonflés le long des normales (`buildClothing`) ; UV du maillot devant/dos (`jerseyUVs`).
+         (repère haut/avant/côté, redressement, taille 2 m). Le corps est au repos en **pose en T** (bras à
+         l'horizontale). Vêtements (`buildClothing`) : chaque pièce est une fonction f (< 0 = dedans, en tailles
+         de personnage) — emmanchure en ellipse autour de l'épaule (bretelles), encolure en ellipsoïde plus
+         profonde devant, ourlets droits ; `clipTriangles` coupe les triangles exactement sur la courbe (poids des
+         os mélangés), puis gonflage le long des normales. UV du maillot devant/dos (`jerseyUVs`).
        - `AnimatedCharacter.js` : même interface que `CharacterMesh` (root, selectionRing, dribbleHand, animTime,
          updateAnimation, updateConfig, disposeOwned). Animation choisie selon l'état + la vitesse mesurée ;
          gestes de basket par `aimBone` (bras orientés vers une direction, mélangés à la pose).
          Coiffures pack : buzz, fade_top, long, buns ; barbes pack : full_beard, stubble, goatee, chinstrap.
-         Les autres styles réutilisent `CharacterMesh.prototype.buildHair/buildBeard` posés sur l'os `Head`.
+         `HairStyles.js` fabrique afro, crête, locks et boucles + bandeau autour d'un crâne mesuré (ellipsoïde
+         `SKULL` dans le repère de l'ancienne tête, ligne d'implantation `hairlineHeight`) ; crête, locks et
+         boucles sont posés sur la coupe rase du pack (`HAIR_BASE_FROM_PACK`). La moustache rétro reprend
+         `CharacterMesh.prototype.buildBeard`, posée sur l'os `Head`.
+         Mélange d'animations par poids (`playBlend` / `blendActions`, pas des animations de déplacement
+         synchronisés) : défense = 30 % accroupi du pack + 70 % debout (`DEFENSE_CROUCH`), une main haute,
+         une main basse.
        - `createCharacter.js` : `createCharacterMesh()` = animé si chargé, sinon ancien modèle.
-       - Mesuré : 10 joueurs animés en 5v5 ≈ 3,8 ms par image, 184 appels de dessin ; testé hôte + invité.
-       - À améliorer : crête et afro (formes simples), posture de défense très basse, bords du maillot aux
-         épaules un peu irréguliers, corps féminin non utilisé.
+       - Mesuré : 10 joueurs animés en 5v5 ≈ 3,5 ms par image, 176 appels de dessin ; testé hôte + invité.
+       - À faire un jour : corps féminin (dans le zip, non utilisé).
      - Piège de mesure : quand la fenêtre de Claude n'est pas visible (contrôle à distance), le navigateur bride
        `requestAnimationFrame` (3 images/s). Mesurer le temps d'une image avec `update()` + `gl.readPixels`.
-     - Le créateur de joueur écrase sa colonne 3D à 0 px sous ~800 px de large (défaut de mise en page d'origine).
+     - Créateur en fenêtre étroite (< 1150 px) : aperçu 3D en haut sur toute la largeur, panneaux dessous, la page
+       défile ; le canvas est en `position: absolute` et suivi par un `ResizeObserver`.
   3. Actions et tactiques une par une : **écrans** (« block » = écran pour le joueur) et pick and roll,
      alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers francs,
      chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.

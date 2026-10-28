@@ -140,6 +140,8 @@ export class CharacterBuilder {
         });
 
         window.addEventListener('resize', () => this.handleResize());
+        // La zone change aussi de taille sans que la fenêtre bouge (changement d'écran, mise en page étroite)
+        if (window.ResizeObserver) new ResizeObserver(() => this.handleResize()).observe(this.container);
     }
 
     handleResize() {

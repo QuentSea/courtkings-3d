@@ -129,6 +129,7 @@
                         <button type="button" class="anim-btn" data-preview-anim="CROSSOVER">Crossover</button>
                         <button type="button" class="anim-btn" data-preview-anim="SHOOT">Tir Jump-Shot</button>
                         <button type="button" class="anim-btn" data-preview-anim="DEFENSE">Défense</button>
+                        <button type="button" class="anim-btn" data-preview-anim="SCREEN">Écran</button>
                     </div>
                 </div>
             </main>
@@ -334,6 +335,12 @@
 
             <div class="match-quick-toolbar">
                 <span id="hud-gamepad-badge" class="hud-gamepad-pill">⌨️ CLAVIER / MANETTE</span>
+                <select id="hud-quality" class="hud-btn hud-select" title="Baisser la qualité rend le jeu plus fluide sur les petits PC">
+                    <option value="auto">Qualité : Auto</option>
+                    <option value="haute">Qualité : Haute</option>
+                    <option value="moyenne">Qualité : Moyenne</option>
+                    <option value="basse">Qualité : Basse (petits PC)</option>
+                </select>
                 <button type="button" class="hud-btn active" data-hud-mode="3v3">3v3 Half</button>
                 <button type="button" class="hud-btn" data-hud-mode="4v4">4v4 Half</button>
                 <button type="button" class="hud-btn" data-hud-mode="5v5">5v5 Full</button>
@@ -368,6 +375,7 @@
             <span><kbd>X / ▢</kbd> / <kbd>Espace</kbd> Tirer (Green)</span>
             <span><kbd>Y / △</kbd> / <kbd>Espace</kbd> / <kbd>R</kbd> Sauter / Contrer / Rebond</span>
             <span><kbd>B / ◯</kbd> / <kbd>C / F</kbd> Crossover / Interception</span>
+            <span><kbd>L1 / ◯</kbd> / <kbd>B</kbd> Écran (avec ballon : en demander un)</span>
             <span><kbd>R2 / Shift</kbd> Sprint</span>
             <span><kbd>L2</kbd> Défense</span>
         </div>

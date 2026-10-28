@@ -166,6 +166,10 @@ export const NetSyncMethods = {
                 this.giveBallTo(stealer.id, true);
                 this.showRuleAlert(`⚡ INTERCEPTION DE ${stealer.profile.playerName} !`);
             }
+        } else if (eventName === 'SCREEN_CALL') {
+            // Un invité porteur demande un écran : l'hôte envoie un bot
+            const handler = this.entities.get(payload.handlerId);
+            if (handler && this.isAuthority && this.ball.holderId === handler.id) this.startPickAndRoll(handler, true);
         } else if (eventName === 'DUNK_START') {
             const dunker = this.entities.get(payload.playerId);
             // Chez un invité, le dunk d'un autre est déjà visible par l'état du monde de l'hôte

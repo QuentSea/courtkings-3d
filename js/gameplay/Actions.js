@@ -364,6 +364,8 @@ export const ActionsMethods = {
                 if (ent.isBot && !shooter.isBot) {
                     contest *= 0.80;
                 }
+                // Défenseur pris dans un écran : il arrive en retard sur le tir
+                if (ent.screenedTimer > 0) contest *= 0.4;
                 if (contest > maxContest) maxContest = contest;
             }
         }

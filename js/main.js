@@ -211,6 +211,16 @@ class CourtKingsApp {
             });
         }
 
+        // Qualité graphique (Auto / Haute / Moyenne / Basse) pour les PC moins puissants
+        const qualitySelect = document.getElementById('hud-quality');
+        if (qualitySelect) {
+            this.gameEngine.quality.updateSelect();
+            qualitySelect.addEventListener('change', () => {
+                this.gameEngine.quality.setMode(qualitySelect.value);
+                qualitySelect.blur(); // rendre les touches au jeu
+            });
+        }
+
         document.querySelectorAll('[data-hud-mode]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const mode = btn.dataset.hudMode;

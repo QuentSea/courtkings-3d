@@ -82,6 +82,11 @@ export const RulesMethods = {
             ent.vel.set(0, 0, 0);
             ent.isDunking = false;
             ent.state = 'IDLE';
+            // Écrans, pick and roll et changements de joueur repartent de zéro
+            ent.screenTimer = 0;
+            ent.screenedTimer = 0;
+            ent.pnr = null;
+            ent.switchManId = null;
         }
 
         if (ballCarrier) {

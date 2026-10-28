@@ -4,6 +4,7 @@
  */
 
 import { POSITIONS } from '../config/constants.js';
+import { SCREENED_SPEED, SCREEN_MIN_TIME } from './Screens.js';
 
 export const ControlsMethods = {
     bindGamepadEvents() {
@@ -59,6 +60,11 @@ export const ControlsMethods = {
             // C : Crossover rapide
             if (code === 'KeyC' && !e.repeat) {
                 this.triggerCrossover(me);
+            }
+
+            // B : Écran (« block ») — sans ballon : poser l'écran ; avec ballon : en demander un
+            if (code === 'KeyB' && !e.repeat) {
+                this.handleActionScreen(me);
             }
 
             // F : Tentative d'interception (Steal)
@@ -120,6 +126,16 @@ export const ControlsMethods = {
         }
     },
 
+    handleActionScreen(me) {
+        if (this.ball.holderId === me.id) {
+            this.callForScreen(me);
+        } else if (this.isScreening(me)) {
+            this.endScreen(me);
+        } else {
+            this.trySetScreen(me);
+        }
+    },
+
     toggleCameraMode() {
         this.cameraMode = this.cameraMode === '2K' ? 'FOLLOW' : '2K';
         this.showRuleAlert(`CAMÉRA : ${this.cameraMode === '2K' ? '2K CAM' : 'VUE SUIVI'}`, false);
@@ -131,7 +147,8 @@ export const ControlsMethods = {
      * - Stick Droit (axes 2, 3) : Direction de visée de passe prioritaire ou Crossover rapide
      * - Bouton 0 (A / Croix) : Passer au coéquipier visé / Demander la balle
      * - Bouton 2 (X / Carré) : Maintenir pour Tirer (Jauge de Tir) / Relâcher au Vert
-     * - Bouton 1 (B / Rond) : Crossover rapide (en attaque) / Interception Steal (en défense)
+     * - Bouton 1 (B / Rond) : Crossover (porteur) / Écran (attaquant sans ballon) / Interception (en défense)
+     * - LB / L1 (Bouton 4) en attaque : Demander un écran (porteur) / Poser un écran
      * - Bouton 3 (Y / Triangle) : Saut / Contre / Rebond
      * - RT / R2 (Bouton 7) ou RB (Bouton 5) : Sprint
      * - LT / L2 (Bouton 6) : Posture défensive (Lockdown)
@@ -195,13 +212,20 @@ export const ControlsMethods = {
                 }
             }
 
-            // Bouton B / Rond (1) : Crossover (si porteur) ou Interception Steal (si défenseur)
+            // Bouton B / Rond (1) : Crossover (si porteur), Écran (attaquant sans ballon) ou Interception (défenseur)
             if (justPressed(1)) {
                 if (this.ball.holderId === me.id) {
                     this.triggerCrossover(me);
+                } else if (this.matchRules.possessionTeam === me.team) {
+                    this.handleActionScreen(me);
                 } else {
                     this.tryStealBall(me);
                 }
+            }
+
+            // LB / L1 (4) en attaque : demander un écran (avec ballon) ou en poser un
+            if (justPressed(4) && this.matchRules.possessionTeam === me.team) {
+                this.handleActionScreen(me);
             }
 
             // Bouton Y / Triangle (3) : Saut / Contre / Rebond
@@ -277,7 +301,17 @@ export const ControlsMethods = {
 
         const isSprinting = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || (padInput && padInput.sprint);
         const isDefending = this.keys['ShiftLeft'] || this.keys['KeyF'] || (padInput && padInput.defend);
-        const speed = 5.2 * posData.baseSpeed * attrSpeedMod * (isSprinting ? 1.25 : 1.0);
+        const screened = me.screenedTimer > 0 ? SCREENED_SPEED : 1;
+        const speed = 5.2 * posData.baseSpeed * attrSpeedMod * (isSprinting ? 1.25 : 1.0) * screened;
+
+        // Écran posé : on reste planté ; se déplacer (après un court instant) lève l'écran
+        if (this.isScreening(me)) {
+            if ((moveX !== 0 || moveZ !== 0) && me.screenHeld >= SCREEN_MIN_TIME) {
+                this.endScreen(me);
+            } else {
+                return;
+            }
+        }
 
         if (moveX !== 0 || moveZ !== 0) {
             const len = Math.sqrt(moveX * moveX + moveZ * moveZ);

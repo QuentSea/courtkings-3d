@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { POSITIONS } from '../config/constants.js';
+import { SCREENED_SPEED } from './Screens.js';
 
 export const BotAIMethods = {
     /**
@@ -28,6 +29,7 @@ export const BotAIMethods = {
         const botSpeed = (isTeammateOfHuman ? 4.75 : 4.35) * posData.baseSpeed;
 
         if (hasBall) {
+            if (bot.pnr) bot.pnr = null; // le bot qui roulait a reçu la balle
             // Si le Bot doit ressortir la balle derrière les 3Pts en demi-terrain
             if (this.currentMode.isHalfCourt && this.matchRules.needsTakeBack) {
                 const takeBackSpot = new THREE.Vector3(0, 0, hoop.rimPos.z + hoop.threePointRadius + 0.9);
@@ -39,6 +41,9 @@ export const BotAIMethods = {
             const distToHoop = this.getHorizontalDist(bot.pos, hoop.rimPos);
             const contest = this.calculateContestFactor(bot);
             bot.aiThinkTimer -= dt;
+
+            // Pick and roll en cours : attendre l'écran, le frôler, servir celui qui roule (Screens.js)
+            if (this.pickAndRollHandlerMove(bot, dt, botSpeed, hoop)) return;
 
             // Si un Bot allié vient de recevoir votre passe en pleine coupe sous le panier (ou totalement ouvert), il tire tout de suite !
             if (isTeammateOfHuman && (distToHoop < 2.6 || (distToHoop >= 5.55 && contest < 0.22))) {
@@ -108,6 +113,9 @@ export const BotAIMethods = {
             bot.state = 'RUN';
             this.tryBlockOrRebound(bot);
         } else if (this.matchRules.possessionTeam === bot.team) {
+            // Écran pour le porteur, puis roll / pop (Screens.js)
+            if (this.updatePickAndRollScreener(bot, dt, botSpeed)) return;
+
             // MOUVEMENT OFFENSIF DYNAMIQUE ("GIVE & GO" / APPELS DE BALLE / COUPES AU PANIER) :
             const dirZ = hoop.side === 'NORTH' ? 1 : -1;
             const sideSign = (bot.slotIndex % 2 === 0) ? -1 : 1;
@@ -159,11 +167,10 @@ export const BotAIMethods = {
             }
         } else {
             // DÉFENSE INDIVIDUELLE 1v1 COMPÉTITIVE MAIS PROPRE :
-            const opponents = Array.from(this.entities.values()).filter(e => e.team !== bot.team);
-            if (opponents.length === 0) return;
-
-            const assignedMan = opponents.find(o => o.slotIndex === bot.slotIndex)
-                || opponents[bot.slotIndex % opponents.length];
+            if (bot.pnr) bot.pnr = null;
+            if (bot.screenTimer > 0) this.endScreen(bot);
+            // Même numéro de place, sauf changement de joueur après un écran (switch)
+            const assignedMan = this.getAssignedMan(bot);
 
             if (assignedMan) {
                 const defHoop = this.getAttackingHoopForTeam(assignedMan.team);
@@ -209,6 +216,7 @@ export const BotAIMethods = {
         const dx = targetVec.x - ent.pos.x;
         const dz = targetVec.z - ent.pos.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
+        if (ent.screenedTimer > 0) speed *= SCREENED_SPEED; // bloqué par un écran
         if (dist > 0.25) {
             ent.pos.x += (dx / dist) * speed * dt;
             ent.pos.z += (dz / dist) * speed * dt;

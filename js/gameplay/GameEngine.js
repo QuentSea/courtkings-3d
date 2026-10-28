@@ -9,6 +9,7 @@
  * - BotAI.js : Intelligence des bots : attaque (appels, coupes, spacing), défense individuelle, déplacements.
  * - Camera.js : Caméra « 2K Cam » / « Vue Suivi » : suit l'action et indique si l'écran est retourné.
  * - NetSync.js : Synchronisation réseau : état du monde de l'hôte, joueurs distants, actions reçues, départs.
+ * - Screens.js : Écrans (« block ») et pick and roll, défenseurs bloqués, changements de joueur (switch).
  */
 
 import * as THREE from 'three';
@@ -17,6 +18,7 @@ import { createCharacterMesh } from '../character/createCharacter.js';
 import { CourtScene } from '../court/CourtScene.js';
 import { ShotMeter } from './ShotMeter.js';
 import { setupRenderer } from '../render/RenderSetup.js';
+import { QualityManager } from '../render/Quality.js';
 import { ControlsMethods } from './Controls.js';
 import { ActionsMethods } from './Actions.js';
 import { BallMethods } from './Ball.js';
@@ -24,6 +26,7 @@ import { RulesMethods } from './Rules.js';
 import { BotAIMethods } from './BotAI.js';
 import { CameraMethods } from './Camera.js';
 import { NetSyncMethods } from './NetSync.js';
+import { ScreenMethods } from './Screens.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -94,6 +97,7 @@ export class GameEngine {
         this.networkSyncTimer = 0;
 
         this.initThreeScene();
+        this.quality = new QualityManager(this);
         this.bindControls();
         this.bindGamepadEvents();
     }
@@ -195,6 +199,11 @@ export class GameEngine {
         for (const ent of this.entities.values()) {
             this.scene.remove(ent.mesh.root);
             ent.mesh.disposeOwned?.();
+            if (ent.screenMarker) {
+                this.scene.remove(ent.screenMarker);
+                ent.screenMarker.geometry.dispose();
+                ent.screenMarker.material.dispose();
+            }
         }
         this.entities.clear();
 
@@ -241,6 +250,7 @@ export class GameEngine {
 
         this.resetPositionsForCheckBall('A');
         this.updateScoreboardUI();
+        this.quality.resetMeasure(); // ne pas juger la fluidité pendant la préparation du match
         this.isRunning = true;
     }
 
@@ -269,7 +279,13 @@ export class GameEngine {
             aiThinkTimer: 0.8 + Math.random() * 0.8,
             cutTimer: 1.5 + slotIndex * 1.1,
             offBallPhase: 'PERIMETER', // 'PERIMETER', 'CUT_BASKET', 'POP_OUT'
-            targetOffBallSpot: null
+            targetOffBallSpot: null,
+            // Écrans (Screens.js)
+            screenTimer: 0,      // > 0 : écran posé
+            screenedTimer: 0,    // > 0 : bloqué par un écran (ralenti)
+            pnr: null,           // bot qui pose un écran pour le porteur : { phase, handlerId, timer, ... }
+            switchManId: null,   // bot défenseur : joueur pris après un changement (switch)
+            switchTimer: 0
         };
 
         this.entities.set(id, entity);
@@ -313,6 +329,8 @@ export class GameEngine {
             for (let j = i + 1; j < list.length; j++) {
                 const a = list[i];
                 const b = list[j];
+                // Un écran ne recule pas : le défenseur qui le percute est arrêté (Screens.js)
+                if (this.resolveScreenCollision(a, b)) continue;
 
                 const dx = b.pos.x - a.pos.x;
                 const dz = b.pos.z - a.pos.z;
@@ -341,11 +359,15 @@ export class GameEngine {
      */
     update(dt) {
         if (!this.isRunning) return;
+        this.quality.sample(dt);
 
         if (this.crossoverCooldown > 0) this.crossoverCooldown -= dt;
         if (this.stealCooldown > 0) this.stealCooldown -= dt;
 
-        // 0. Lire l'état de la Manette (si connectée)
+        // 0. Écrans posés, défenseurs bloqués, pick and roll lancé par l'hôte
+        this.updateScreens(dt);
+
+        // 0 bis. Lire l'état de la Manette (si connectée)
         const padInput = this.pollGamepadInput();
 
         // 1. Mise à jour du joueur local (Clavier + Manette)
@@ -449,6 +471,7 @@ export class GameEngine {
             }
             ent.mesh.root.rotation.y = ent.rotY;
             ent.mesh.updateAnimation(dt, ent.state);
+            this.updateScreenMarker(ent);
         }
 
         // 7. Mise à jour de la physique du Ballon
@@ -491,4 +514,4 @@ export class GameEngine {
     }
 }
 
-Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods, NetSyncMethods);
+Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods, NetSyncMethods, ScreenMethods);

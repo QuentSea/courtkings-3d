@@ -996,6 +996,11 @@ body {
     background: rgba(249, 115, 22, 0.25);
 }
 
+.hud-select option {
+    background: #0f172a;
+    color: #fff;
+}
+
 /* JAUGE DE TIR (SHOT METER) */
 .shot-meter-container {
     position: absolute;

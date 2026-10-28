@@ -353,6 +353,9 @@ export class AnimatedCharacter {
             // Posture de défense : l'accroupi du pack mélangé avec la pose debout (genoux fléchis, dos droit)
             this.playBlend(moving ? { crouchMove: DEFENSE_CROUCH, jog: 1 - DEFENSE_CROUCH }
                 : { crouchIdle: DEFENSE_CROUCH, idle: 1 - DEFENSE_CROUCH }, 0.2);
+        } else if (state === 'SCREEN') {
+            // Écran : appuis larges, un peu fléchi, immobile
+            this.playBlend({ crouchIdle: 0.2, idle: 0.8 }, 0.15);
         } else {
             this.playAction(key, key === 'air' ? 0.1 : 0.2);
         }
@@ -392,6 +395,10 @@ export class AnimatedCharacter {
         }
         if (state === 'CONTEST') {
             return { plusX: [v(0.15, 1, 0.2), v(0.05, 1, 0.1)], minusX: [v(-0.15, 1, 0.2), v(-0.05, 1, 0.1)] };
+        }
+        if (state === 'SCREEN') {
+            // Bras croisés contre la poitrine (écran réglementaire)
+            return { plusX: [v(0.3, -0.75, 0.55), v(-0.95, 0.2, 0.3)], minusX: [v(-0.3, -0.7, 0.55), v(0.95, 0.25, 0.3)] };
         }
         if (state === 'DEFENSE') {
             // Une main haute (contre le tir), une main basse et écartée (contre le dribble)

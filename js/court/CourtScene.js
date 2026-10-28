@@ -29,6 +29,7 @@ export class CourtScene {
         this.scene.add(hemiLight);
 
         const mainSpot = new THREE.DirectionalLight('#fffbeb', 2.1);
+        this.mainLight = mainSpot; // taille de l'ombre réglée par la qualité
         mainSpot.position.set(12, 24, 14);
         mainSpot.castShadow = true;
         mainSpot.shadow.mapSize.width = 2048;
@@ -481,13 +482,14 @@ export class CourtScene {
         const shirtColors = ['#0284c7', '#38bdf8', '#e11d48', '#f43f5e', '#f97316', '#facc15', '#f8fafc', '#1f2937', '#22c55e', '#a855f7'];
         const skinColors = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#5c3a1e', '#ffdbac'];
 
+        // Formes très simples (~120 triangles par spectateur) : vus de loin, la différence ne se voit pas
         const bodies = new THREE.InstancedMesh(
-            new THREE.CapsuleGeometry(0.17, 0.32, 4, 8),
+            new THREE.CapsuleGeometry(0.17, 0.32, 2, 6),
             new THREE.MeshStandardMaterial({ roughness: 0.8 }),
             seats.length
         );
         const heads = new THREE.InstancedMesh(
-            new THREE.SphereGeometry(0.12, 10, 8),
+            new THREE.SphereGeometry(0.12, 7, 5),
             new THREE.MeshStandardMaterial({ roughness: 0.7 }),
             seats.length
         );
@@ -504,6 +506,9 @@ export class CourtScene {
         });
         this.courtGroup.add(bodies, heads);
         this.crowdCount = seats.length;
+        // Qualité « Basse » : public caché (voir render/Quality.js)
+        this.crowdMeshes = [bodies, heads];
+        bodies.visible = heads.visible = this.crowdVisible !== false;
     }
 
     /**

@@ -152,14 +152,38 @@
          une main basse.
        - `createCharacter.js` : `createCharacterMesh()` = animé si chargé, sinon ancien modèle.
        - Mesuré : 10 joueurs animés en 5v5 ≈ 3,5 ms par image, 176 appels de dessin ; testé hôte + invité.
-       - À faire un jour : corps féminin (dans le zip, non utilisé).
+       - Corps féminin (dans le zip, non utilisé) : le joueur n'en veut pas pour le moment (28 octobre 2026).
      - Piège de mesure : quand la fenêtre de Claude n'est pas visible (contrôle à distance), le navigateur bride
        `requestAnimationFrame` (3 images/s). Mesurer le temps d'une image avec `update()` + `gl.readPixels`.
      - Créateur en fenêtre étroite (< 1150 px) : aperçu 3D en haut sur toute la largeur, panneaux dessous, la page
        défile ; le canvas est en `position: absolute` et suivi par un `ResizeObserver`.
-  3. Actions et tactiques une par une : **écrans** (« block » = écran pour le joueur) et pick and roll,
-     alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers francs,
-     chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.
+     - **Qualité graphique** (`js/render/Quality.js`, `QualityManager` dans `GameEngine.quality`) : Haute (jusqu'à
+       2 px par point, ombre 2048), Moyenne (1 px par point, ombre 1024), Basse (70 % des pixels, sans ombres ni
+       public). Menu `#hud-quality` dans le HUD du match, choix gardé dans `localStorage` (`courtkings_qualite`).
+       « Auto » (défaut) part de Haute et baisse d'un cran si la moyenne passe sous 45 images/s (2 s ignorées
+       après un changement, mesure sur 2,5 s, images > 0,25 s ignorées : onglet caché ≠ PC lent). Ne remonte pas.
+       Public allégé pour tous (capsule 2×6, tête 7×5 : ~120 triangles au lieu de 412) : 598 k → 376 k triangles.
+     - Test « PC moins puissant » (28 octobre 2026) : le PC du joueur (Radeon RX 9070 XT, 32 fils) est trop rapide
+       pour juger. Simulé en rendant chaque image artificiellement lente (40 ms par mégapixel + 6 à 10 ms d'ombres)
+       → Auto passe en Moyenne à 3,8 s puis Basse à 8,3 s, ~28 → ~77 images/s. Pas testé sur un vrai petit PC.
+  3. Actions et tactiques une par une :
+     - ✅ **Écrans** (« block » = écran pour le joueur) et pick and roll — `js/gameplay/Screens.js` (28 octobre 2026) :
+       - Touche **B** (manette : Rond en attaque sans ballon, ou L1) : sans ballon, poser un écran (état `'SCREEN'`,
+         2,2 s maxi, bouger après 0,45 s le lève) ; avec ballon, en demander un (`callForScreen`, événement
+         `SCREEN_CALL` vers l'hôte pour un invité).
+       - Collision (`resolveScreenCollision`, appelée par `resolvePlayerCollisions`) : l'écran ne recule pas,
+         l'adversaire est tenu à 1,2 m et ralenti à 30 % pendant 0,95 s (`screenedTimer`) ; il conteste à 40 %.
+         Anneau orange au sol (`updateScreenMarker`), bras croisés (`AnimatedCharacter`, aperçu « Écran » du créateur).
+       - Pick and roll des bots (hôte) : `startPickAndRoll` → `bot.pnr` phases GO (aller sur le défenseur du
+         porteur), SET (écran), puis ROLL vers le panier ou POP à 3 pts si tir ≥ 84 ; le bot porteur attend, frôle
+         l'écran et sert le rouleur s'il est libre. Lancé seul (`updateScreens`, cooldown 8–13 s, 35 % si porteur
+         bot, 12 % si humain, porteur entre 4,5 et 10 m du panier). Défense : switch possible (`switchManId`,
+         `getAssignedMan`). Tout est remis à zéro à chaque remise en jeu.
+       - Testé : écran à la main, pick and roll demandé (défenseur bloqué, 2 m d'avance), 2 min de bots seuls
+         (5 pick and roll, 4 roll, 1 pop), hôte + invité (écran de l'invité vu et efficace chez l'hôte, appel
+         d'écran de l'invité → bot envoyé), aucune erreur.
+     - À faire : alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers
+       francs, chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

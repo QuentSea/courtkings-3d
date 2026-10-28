@@ -20,6 +20,7 @@ import {
     CHARACTER_PRESETS
 } from '../config/constants.js';
 import { CharacterMesh } from './CharacterMesh.js';
+import { setupRenderer } from '../render/RenderSetup.js';
 
 export class CharacterBuilder {
     constructor(canvasContainerId, onConfirmCallback) {
@@ -65,6 +66,7 @@ export class CharacterBuilder {
         this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
+        setupRenderer(this.renderer, this.scene);
         this.container.innerHTML = '';
         this.container.appendChild(this.renderer.domElement);
 

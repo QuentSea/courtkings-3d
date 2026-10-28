@@ -13,6 +13,7 @@ import { CharacterBuilder } from './character/CharacterBuilder.js';
 import { CharacterMesh } from './character/CharacterMesh.js';
 import { NetworkManager } from './network/NetworkManager.js';
 import { GameEngine } from './gameplay/GameEngine.js';
+import { setupRenderer } from './render/RenderSetup.js';
 
 class CourtKingsApp {
     constructor() {
@@ -67,6 +68,7 @@ class CourtKingsApp {
         this.lobbyRenderer = new THREE.WebGLRenderer({ antialias: true });
         this.lobbyRenderer.setSize(w, h);
         this.lobbyRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        setupRenderer(this.lobbyRenderer, this.lobbyScene);
         container.innerHTML = '';
         container.appendChild(this.lobbyRenderer.domElement);
 

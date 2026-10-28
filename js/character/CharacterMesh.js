@@ -16,6 +16,7 @@ import {
     JERSEY_COLORS,
     POSITIONS
 } from '../config/constants.js';
+import { asColorTexture } from '../render/RenderSetup.js';
 
 export class CharacterMesh {
     constructor(config = {}) {
@@ -114,7 +115,7 @@ export class CharacterMesh {
         ctx.font = '900 108px "Chakra Petch", sans-serif';
         ctx.fillText(String(numberText || '23').slice(0, 2), 128, 171);
 
-        const texture = new THREE.CanvasTexture(canvas);
+        const texture = asColorTexture(new THREE.CanvasTexture(canvas));
         texture.needsUpdate = true;
         return texture;
     }
@@ -157,8 +158,9 @@ export class CharacterMesh {
         ctx.textAlign = 'left';
         ctx.fillText(String(name || 'Baller').slice(0, 14), 174, 72);
 
-        const tex = new THREE.CanvasTexture(canvas);
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const tex = asColorTexture(new THREE.CanvasTexture(canvas));
+        // Étiquette = interface : pas d'effet d'éclairage « cinéma », couleurs exactes
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, toneMapped: false });
         const sprite = new THREE.Sprite(mat);
         sprite.scale.set(2.2, 0.55, 1);
         sprite.position.set(0, 2.55, 0);

@@ -8,6 +8,7 @@
  */
 
 import * as THREE from 'three';
+import { asColorTexture } from '../render/RenderSetup.js';
 
 export class CourtScene {
     constructor(scene) {
@@ -23,10 +24,11 @@ export class CourtScene {
     }
 
     setupLights() {
-        const hemiLight = new THREE.HemisphereLight('#e0f2fe', '#1e293b', 0.75);
+        // L'éclairage d'ambiance (RenderSetup) apporte déjà une lumière douce : hémisphère plus discrète
+        const hemiLight = new THREE.HemisphereLight('#e0f2fe', '#1e293b', 0.45);
         this.scene.add(hemiLight);
 
-        const mainSpot = new THREE.DirectionalLight('#fffbeb', 1.55);
+        const mainSpot = new THREE.DirectionalLight('#fffbeb', 2.1);
         mainSpot.position.set(12, 24, 14);
         mainSpot.castShadow = true;
         mainSpot.shadow.mapSize.width = 2048;
@@ -57,18 +59,8 @@ export class CourtScene {
         const W = canvas.width;
         const H = canvas.height;
 
-        // 1. Fond parquet lattes de bois érable
-        ctx.fillStyle = '#c87d3b';
-        ctx.fillRect(0, 0, W, H);
-
-        // Lattes subtiles
-        for (let y = 0; y < H; y += 32) {
-            for (let x = 0; x < W; x += 16) {
-                const variation = ((x * 7 + y * 13) % 18) - 9;
-                ctx.fillStyle = `rgb(${200 + variation}, ${125 + variation}, ${59 + variation})`;
-                ctx.fillRect(x, y, 15, 31);
-            }
-        }
+        // 1. Parquet en érable : longues lattes dans le sens du terrain, joints décalés et veines du bois
+        this.drawWoodPlanks(ctx, W, H);
 
         // Bordure extérieure (Out of bounds) bleu nuit / bitume
         const border = 48;
@@ -191,10 +183,48 @@ export class CourtScene {
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
 
-        const tex = new THREE.CanvasTexture(canvas);
+        const tex = asColorTexture(new THREE.CanvasTexture(canvas));
         tex.anisotropy = 8;
         tex.needsUpdate = true;
         return tex;
+    }
+
+    drawWoodPlanks(ctx, W, H) {
+        // Générateur pseudo-aléatoire fixe : le même parquet chez tous les joueurs
+        let seed = 7;
+        const rand = () => {
+            seed = (seed * 16807) % 2147483647;
+            return seed / 2147483647;
+        };
+
+        const plankW = 22;
+        for (let x = 0; x < W; x += plankW) {
+            let y = -Math.floor(rand() * 300);
+            while (y < H) {
+                const len = 220 + Math.floor(rand() * 260);
+                const v = Math.floor(rand() * 26) - 13;
+                ctx.fillStyle = `rgb(${214 + v}, ${150 + v}, ${92 + Math.floor(v * 0.8)})`;
+                ctx.fillRect(x, y, plankW, len);
+
+                // Veines du bois : fines lignes un peu plus sombres dans la longueur
+                ctx.strokeStyle = `rgba(120, 70, 30, ${0.08 + rand() * 0.08})`;
+                ctx.lineWidth = 1;
+                for (let g = 0; g < 3; g++) {
+                    const gx = x + 3 + rand() * (plankW - 6);
+                    ctx.beginPath();
+                    ctx.moveTo(gx, y + 4);
+                    ctx.bezierCurveTo(gx + rand() * 4 - 2, y + len * 0.33, gx + rand() * 4 - 2, y + len * 0.66, gx, y + len - 4);
+                    ctx.stroke();
+                }
+
+                // Joint entre deux lattes
+                ctx.fillStyle = 'rgba(70, 40, 18, 0.35)';
+                ctx.fillRect(x, y + len - 1, plankW, 1);
+                y += len;
+            }
+            ctx.fillStyle = 'rgba(70, 40, 18, 0.3)';
+            ctx.fillRect(x + plankW - 1, 0, 1, H);
+        }
     }
 
     /**
@@ -226,10 +256,13 @@ export class CourtScene {
         // Surface du terrain avec marquages
         const courtTex = this.createCourtTexture(isHalfCourt);
         const floorGeo = new THREE.PlaneGeometry(this.courtWidth + 1.4, this.courtLength + 1.4);
-        const floorMat = new THREE.MeshStandardMaterial({
+        // Parquet verni : couche de vernis brillante qui reflète les lumières de l'arène
+        const floorMat = new THREE.MeshPhysicalMaterial({
             map: courtTex,
-            roughness: 0.35,
-            metalness: 0.05
+            roughness: 0.45,
+            metalness: 0,
+            clearcoat: 0.85,
+            clearcoatRoughness: 0.16
         });
         const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
@@ -246,8 +279,11 @@ export class CourtScene {
             this.createHoopUnit(0, southHoopZ, -1, 'SOUTH');
         }
 
-        // Gradins / Barrières lumineuses décoratives autour du terrain
-        this.createArenaPerimeter();
+        // Arène : panneaux lumineux, tribunes avec public, écran géant du score, rampes de lumière
+        this.createLedBoards();
+        this.createStandsAndCrowd();
+        this.createJumbotron();
+        this.createCeilingLights();
     }
 
     createHoopUnit(x, rimZ, dirZ, side) {
@@ -339,32 +375,225 @@ export class CourtScene {
         this.courtGroup.add(arcRing);
     }
 
-    createArenaPerimeter() {
-        const barrierMat = new THREE.MeshStandardMaterial({
-            color: '#1e293b',
-            roughness: 0.6
+    /**
+     * Les 4 côtés de l'arène, à une distance donnée du bord du terrain :
+     * centre, longueur du côté, et rotation pour faire face au terrain
+     */
+    getArenaSides(margin) {
+        const hw = this.courtWidth / 2 + margin;
+        const hl = this.courtLength / 2 + margin;
+        return [
+            { x: -hw, z: 0, length: hl * 2, rotY: Math.PI / 2, out: new THREE.Vector3(-1, 0, 0) },
+            { x: hw, z: 0, length: hl * 2, rotY: -Math.PI / 2, out: new THREE.Vector3(1, 0, 0) },
+            { x: 0, z: -hl, length: hw * 2, rotY: 0, out: new THREE.Vector3(0, 0, -1) },
+            { x: 0, z: hl, length: hw * 2, rotY: Math.PI, out: new THREE.Vector3(0, 0, 1) }
+        ];
+    }
+
+    /**
+     * Panneaux publicitaires lumineux (LED) tout autour du terrain
+     */
+    createLedBoards() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 1024, 0);
+        grad.addColorStop(0, '#0c4a6e');
+        grad.addColorStop(0.5, '#1e1b4b');
+        grad.addColorStop(1, '#7c2d12');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 1024, 64);
+        ctx.font = '900 40px "Chakra Petch", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f97316';
+        ctx.fillText('COURTKINGS 3D', 256, 34);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('★  STREETBALL  ★', 768, 34);
+
+        const tex = asColorTexture(new THREE.CanvasTexture(canvas));
+        tex.wrapS = THREE.RepeatWrapping;
+
+        for (const side of this.getArenaSides(1.25)) {
+            const sideTex = tex.clone();
+            sideTex.repeat.set(Math.max(1, Math.round(side.length / 9)), 1);
+            sideTex.needsUpdate = true;
+            const mat = new THREE.MeshBasicMaterial({ map: sideTex, toneMapped: false });
+            const board = new THREE.Mesh(new THREE.PlaneGeometry(side.length, 0.7), mat);
+            board.position.set(side.x, 0.38, side.z);
+            board.rotation.y = side.rotY;
+            this.courtGroup.add(board);
+
+            // Dos du panneau (caisson sombre)
+            const back = new THREE.Mesh(
+                new THREE.BoxGeometry(side.length, 0.78, 0.18),
+                new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.7 })
+            );
+            back.position.copy(board.position).addScaledVector(side.out, 0.1);
+            back.rotation.y = side.rotY;
+            this.courtGroup.add(back);
+        }
+    }
+
+    /**
+     * Tribunes en gradins et public. Tous les spectateurs sont dessinés en une seule fois
+     * (InstancedMesh) pour rester fluide même avec des centaines de personnes.
+     */
+    createStandsAndCrowd() {
+        let seed = 42;
+        const rand = () => {
+            seed = (seed * 16807) % 2147483647;
+            return seed / 2147483647;
+        };
+
+        const rows = 6;
+        const rowDepth = 0.9;
+        const rowRise = 0.42;
+        const startMargin = 2.4;
+        const standMat = new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.85 });
+        const seats = [];
+
+        for (const side of this.getArenaSides(startMargin)) {
+            for (let r = 0; r < rows; r++) {
+                const rowLength = side.length + r * rowDepth * 2;
+                const height = 0.3 + r * rowRise;
+                const step = new THREE.Mesh(new THREE.BoxGeometry(rowLength, height, rowDepth), standMat);
+                const center = new THREE.Vector3(side.x, height / 2, side.z).addScaledVector(side.out, r * rowDepth + rowDepth / 2);
+                step.position.copy(center);
+                step.rotation.y = side.rotY;
+                step.receiveShadow = true;
+                this.courtGroup.add(step);
+
+                // Places assises le long de la rangée (quelques places vides)
+                const along = new THREE.Vector3(-side.out.z, 0, side.out.x);
+                const count = Math.floor(rowLength / 0.72);
+                for (let i = 0; i < count; i++) {
+                    if (rand() < 0.14) continue;
+                    const offset = (i + 0.5) * (rowLength / count) - rowLength / 2 + (rand() - 0.5) * 0.15;
+                    const p = center.clone().addScaledVector(along, offset);
+                    p.y = height;
+                    seats.push(p);
+                }
+            }
+        }
+
+        const shirtColors = ['#0284c7', '#38bdf8', '#e11d48', '#f43f5e', '#f97316', '#facc15', '#f8fafc', '#1f2937', '#22c55e', '#a855f7'];
+        const skinColors = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#5c3a1e', '#ffdbac'];
+
+        const bodies = new THREE.InstancedMesh(
+            new THREE.CapsuleGeometry(0.17, 0.32, 4, 8),
+            new THREE.MeshStandardMaterial({ roughness: 0.8 }),
+            seats.length
+        );
+        const heads = new THREE.InstancedMesh(
+            new THREE.SphereGeometry(0.12, 10, 8),
+            new THREE.MeshStandardMaterial({ roughness: 0.7 }),
+            seats.length
+        );
+        const m = new THREE.Matrix4();
+        const c = new THREE.Color();
+        seats.forEach((p, i) => {
+            const standing = rand() < 0.18 ? 0.22 : 0; // quelques spectateurs debout
+            m.makeTranslation(p.x, p.y + 0.36 + standing, p.z);
+            bodies.setMatrixAt(i, m);
+            bodies.setColorAt(i, c.set(shirtColors[Math.floor(rand() * shirtColors.length)]));
+            m.makeTranslation(p.x, p.y + 0.78 + standing, p.z);
+            heads.setMatrixAt(i, m);
+            heads.setColorAt(i, c.set(skinColors[Math.floor(rand() * skinColors.length)]));
         });
-        const neonMat = new THREE.MeshBasicMaterial({ color: '#0284c7' });
+        this.courtGroup.add(bodies, heads);
+        this.crowdCount = seats.length;
+    }
 
-        const halfW = this.courtWidth / 2 + 1.6;
-        const halfL = this.courtLength / 2 + 1.8;
+    /**
+     * Écran géant suspendu au-dessus du terrain : affiche le score sur ses 4 faces
+     */
+    createJumbotron() {
+        const group = new THREE.Group();
+        group.position.set(0, 10.5, 0);
 
-        // Barrières latérales gauche et droite
-        [-halfW, halfW].forEach((posX) => {
-            const wall = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, this.courtLength + 2), barrierMat);
-            wall.position.set(posX, 0.375, 0);
-            wall.receiveShadow = true;
-            this.courtGroup.add(wall);
+        const frame = new THREE.Mesh(
+            new THREE.BoxGeometry(5.2, 2.6, 5.2),
+            new THREE.MeshStandardMaterial({ color: '#0b1120', metalness: 0.6, roughness: 0.35 })
+        );
+        group.add(frame);
 
-            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.06, this.courtLength + 2), neonMat);
-            strip.position.set(posX, 0.72, 0);
-            this.courtGroup.add(strip);
-        });
+        this.scoreCanvas = document.createElement('canvas');
+        this.scoreCanvas.width = 512;
+        this.scoreCanvas.height = 256;
+        this.scoreTexture = asColorTexture(new THREE.CanvasTexture(this.scoreCanvas));
+        const screenMat = new THREE.MeshBasicMaterial({ map: this.scoreTexture, toneMapped: false });
 
-        // Barrière fond Nord
-        const northWall = new THREE.Mesh(new THREE.BoxGeometry(this.courtWidth + 3.4, 0.75, 0.25), barrierMat);
-        northWall.position.set(0, 0.375, -halfL);
-        this.courtGroup.add(northWall);
+        for (let k = 0; k < 4; k++) {
+            const screen = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 2.3), screenMat);
+            const angle = k * Math.PI / 2;
+            screen.position.set(Math.sin(angle) * 2.62, 0, Math.cos(angle) * 2.62);
+            screen.rotation.y = angle;
+            group.add(screen);
+        }
+
+        // Câbles de suspension
+        const cableMat = new THREE.MeshBasicMaterial({ color: '#334155' });
+        for (const [cx, cz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) {
+            const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4, 4), cableMat);
+            cable.position.set(cx, 3.3, cz);
+            group.add(cable);
+        }
+
+        this.courtGroup.add(group);
+        this.updateScoreboard(this.lastScoreA || 0, this.lastScoreB || 0);
+    }
+
+    updateScoreboard(scoreA, scoreB) {
+        this.lastScoreA = scoreA;
+        this.lastScoreB = scoreB;
+        if (!this.scoreCanvas) return;
+        const ctx = this.scoreCanvas.getContext('2d');
+        ctx.fillStyle = '#020617';
+        ctx.fillRect(0, 0, 512, 256);
+
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(0, 0, 256, 56);
+        ctx.fillStyle = '#e11d48';
+        ctx.fillRect(256, 0, 256, 56);
+
+        ctx.font = '900 34px "Chakra Petch", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('ÉQUIPE A', 128, 30);
+        ctx.fillText('ÉQUIPE B', 384, 30);
+
+        ctx.font = '900 130px "Chakra Petch", sans-serif';
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(String(scoreA), 128, 160);
+        ctx.fillStyle = '#fb7185';
+        ctx.fillText(String(scoreB), 384, 160);
+
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(254, 80, 4, 150);
+        this.scoreTexture.needsUpdate = true;
+    }
+
+    /**
+     * Rampes de projecteurs au plafond (purement visuelles : la vraie lumière vient de setupLights)
+     */
+    createCeilingLights() {
+        const lampMat = new THREE.MeshBasicMaterial({ color: '#fff7e6', toneMapped: false });
+        const lampGeo = new THREE.BoxGeometry(0.9, 0.12, 0.5);
+        const trussMat = new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.7, roughness: 0.4 });
+        const halfL = this.courtLength / 2;
+        for (const x of [-6, 6]) {
+            const truss = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, this.courtLength + 4), trussMat);
+            truss.position.set(x, 13.2, 0);
+            this.courtGroup.add(truss);
+            for (let z = -halfL; z <= halfL; z += 3.5) {
+                const lamp = new THREE.Mesh(lampGeo, lampMat);
+                lamp.position.set(x, 13, z);
+                this.courtGroup.add(lamp);
+            }
+        }
     }
 
     getTargetHoop(attackingSide = 'NORTH') {

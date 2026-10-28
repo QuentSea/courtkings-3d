@@ -122,6 +122,9 @@ export const RulesMethods = {
         const modeEl = document.getElementById('hud-mode-badge');
         const ruleEl = document.getElementById('hud-rule-status');
 
+        if (this.court && (this.court.lastScoreA !== this.matchRules.scoreA || this.court.lastScoreB !== this.matchRules.scoreB)) {
+            this.court.updateScoreboard(this.matchRules.scoreA, this.matchRules.scoreB);
+        }
         if (scoreAEl) scoreAEl.textContent = this.matchRules.scoreA;
         if (scoreBEl) scoreBEl.textContent = this.matchRules.scoreB;
         if (modeEl) modeEl.textContent = this.currentMode.id;

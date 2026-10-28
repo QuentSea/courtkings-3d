@@ -16,6 +16,7 @@ import { CHARACTER_PRESETS, GAME_MODES } from '../config/constants.js';
 import { CharacterMesh } from '../character/CharacterMesh.js';
 import { CourtScene } from '../court/CourtScene.js';
 import { ShotMeter } from './ShotMeter.js';
+import { setupRenderer } from '../render/RenderSetup.js';
 import { ControlsMethods } from './Controls.js';
 import { ActionsMethods } from './Actions.js';
 import { BallMethods } from './Ball.js';
@@ -113,6 +114,7 @@ export class GameEngine {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        setupRenderer(this.renderer, this.scene);
 
         this.container.innerHTML = '';
         this.container.appendChild(this.renderer.domElement);

@@ -1723,13 +1723,15 @@ export class GameEngine {
      * L'hôte envoie à 20 Hz : joueurs (sauf celui de l'invité), ballon, score et règles
      */
     buildWorldState() {
-        const v = (vec) => ({ x: vec.x, y: vec.y, z: vec.z });
+        // Arrondi au centimètre : paquet ~3 fois plus léger (envoyé 20 fois/s à chacun des 9 invités max)
+        const r = (n) => Math.round(n * 100) / 100;
+        const v = (vec) => ({ x: r(vec.x), y: r(vec.y), z: r(vec.z) });
         const players = [];
         for (const ent of this.entities.values()) {
             players.push({
                 id: ent.id,
                 pos: v(ent.pos),
-                rotY: ent.rotY,
+                rotY: r(ent.rotY),
                 state: ent.state,
                 dribbleHand: ent.mesh.dribbleHand
             });
@@ -1744,7 +1746,7 @@ export class GameEngine {
                 vel: v(b.vel),
                 flightStart: v(b.flightStart),
                 flightTarget: v(b.flightTarget),
-                flightTime: b.flightTime,
+                flightTime: Math.round(b.flightTime * 1000) / 1000,
                 flightDuration: b.flightDuration,
                 flightArcHeight: b.flightArcHeight,
                 passTargetId: b.passTargetId,
@@ -1759,6 +1761,17 @@ export class GameEngine {
             },
             alert: { seq: this.alertSeq, text: this.lastAlertText }
         };
+    }
+
+    /**
+     * Un joueur a quitté pendant le match : l'IA de l'hôte reprend son personnage pour garder les équipes complètes
+     */
+    handlePlayerLeft(peerId) {
+        const ent = this.entities.get(peerId);
+        if (!ent || ent.isLocal) return;
+        ent.isBot = true;
+        ent.netPos = null;
+        if (this.isRunning) this.showRuleAlert(`${ent.profile.playerName} a quitté : l'IA le remplace`);
     }
 
     handleWorldState(packet) {

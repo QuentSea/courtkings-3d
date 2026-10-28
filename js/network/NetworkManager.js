@@ -7,6 +7,10 @@
  * - Synchronise : Profils 3D du Lobby, Équipes (A/B), Mode (3v3, 4v4, 5v5), Positions des joueurs, Animations, Ballon et Score.
  */
 
+// 10 joueurs humains au maximum (5 contre 5)
+const MAX_PER_TEAM = 5;
+const MODE_SIZES = { '3v3': 3, '4v4': 4, '5v5': 5 };
+
 export class NetworkManager {
     constructor(callbacks = {}) {
         this.callbacks = callbacks;
@@ -130,6 +134,8 @@ export class NetworkManager {
                     conn.on('data', (data) => this.handleIncomingPacket(data, conn));
                     conn.on('close', () => {
                         this.peers.delete(conn.peer);
+                        // Un invité est parti : le retirer du salon (son joueur passe en bot pendant un match)
+                        if (conn.lobbyPeerId) this.removePlayer(conn.lobbyPeerId);
                     });
                 });
                 this.peerInstance.on('error', () => resolve(false));
@@ -158,6 +164,10 @@ export class NetworkManager {
                         resolve(true);
                     });
                     conn.on('data', (data) => this.handleIncomingPacket(data, conn));
+                    conn.on('close', () => {
+                        this.peers.delete(hostPeerId);
+                        if (this.callbacks.onHostLeft) this.callbacks.onHostLeft();
+                    });
                     setTimeout(() => resolve(false), 1800);
                 });
                 this.peerInstance.on('error', () => resolve(false));
@@ -167,10 +177,15 @@ export class NetworkManager {
         });
     }
 
-    handleIncomingPacket(packet) {
+    countTeam(team) {
+        return Object.values(this.lobbyState.players).filter(p => p.team === team).length;
+    }
+
+    handleIncomingPacket(packet, conn = null) {
         if (!packet || !packet.type) return;
 
         if (packet.type === 'JOIN_REQUEST' && this.isHost) {
+            if (conn) conn.lobbyPeerId = packet.senderId;
             // La demande arrive par BroadcastChannel ET par PeerJS : ne pas recompter un joueur déjà présent
             const existing = this.lobbyState.players[packet.senderId];
             if (existing) {
@@ -179,8 +194,13 @@ export class NetworkManager {
                 this.notifyLobbyUpdated();
                 return;
             }
-            const countA = Object.values(this.lobbyState.players).filter(p => p.team === 'A').length;
-            const countB = Object.values(this.lobbyState.players).filter(p => p.team === 'B').length;
+            const countA = this.countTeam('A');
+            const countB = this.countTeam('B');
+            if (countA >= MAX_PER_TEAM && countB >= MAX_PER_TEAM) {
+                // 10 joueurs déjà là (5 contre 5) : prévenir le nouveau venu
+                this.broadcastPacket({ type: 'ROOM_FULL', targetId: packet.senderId });
+                return;
+            }
             const assignedTeam = countA <= countB ? 'A' : 'B';
 
             this.lobbyState.players[packet.senderId] = {
@@ -191,13 +211,19 @@ export class NetworkManager {
             };
             this.broadcastLobbyState();
             this.notifyLobbyUpdated();
+        } else if (packet.type === 'ROOM_FULL') {
+            if (packet.targetId === this.localPeerId && this.callbacks.onRoomFull) {
+                this.callbacks.onRoomFull();
+            }
         } else if (packet.type === 'LOBBY_SYNC') {
             this.lobbyState = packet.lobbyState;
             this.notifyLobbyUpdated();
         } else if (packet.type === 'TEAM_SWITCH') {
             const p = this.lobbyState.players[packet.senderId];
             if (p) {
-                p.team = packet.team;
+                // L'hôte refuse d'aller dans une équipe déjà à 5 (et renvoie le salon pour annuler le changement)
+                const full = p.team !== packet.team && this.countTeam(packet.team) >= MAX_PER_TEAM;
+                if (!full) p.team = packet.team;
                 if (this.isHost) this.broadcastLobbyState();
                 this.notifyLobbyUpdated();
             }
@@ -253,7 +279,11 @@ export class NetworkManager {
 
     switchLocalTeam(newTeam) {
         const me = this.lobbyState.players[this.localPeerId];
-        if (!me) return;
+        if (!me || me.team === newTeam) return;
+        if (this.countTeam(newTeam) >= MAX_PER_TEAM) {
+            if (this.callbacks.onTeamFull) this.callbacks.onTeamFull(newTeam);
+            return;
+        }
         me.team = newTeam;
         this.broadcastPacket({
             type: 'TEAM_SWITCH',
@@ -291,6 +321,17 @@ export class NetworkManager {
     }
 
     startMatch() {
+        // Seul l'hôte lance le match (c'est lui qui le calcule)
+        if (!this.isHost) {
+            if (this.callbacks.onOnlyHostCanStart) this.callbacks.onOnlyHostCanStart();
+            return;
+        }
+        // Trop d'humains pour le mode choisi : passer au mode qui les accueille tous (ex. 4 contre 3 en 3v3 → 4v4)
+        const needed = Math.max(this.countTeam('A'), this.countTeam('B'));
+        const currentSize = MODE_SIZES[this.lobbyState.mode] || 3;
+        if (needed > currentSize) {
+            this.lobbyState.mode = needed <= 4 ? '4v4' : '5v5';
+        }
         this.lobbyState.matchStarted = true;
         this.broadcastPacket({
             type: 'START_MATCH',
@@ -325,6 +366,14 @@ export class NetworkManager {
             eventName,
             payload
         });
+    }
+
+    removePlayer(peerId) {
+        if (!this.lobbyState.players[peerId]) return;
+        delete this.lobbyState.players[peerId];
+        this.broadcastLobbyState();
+        this.notifyLobbyUpdated();
+        if (this.callbacks.onPlayerLeft) this.callbacks.onPlayerLeft(peerId);
     }
 
     notifyLobbyUpdated() {

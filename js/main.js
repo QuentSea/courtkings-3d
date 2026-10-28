@@ -30,7 +30,12 @@ class CourtKingsApp {
             onMatchStart: (lobbyState) => this.enterMatchScreen(lobbyState),
             onRemotePlayerState: (packet) => this.gameEngine?.handleRemotePlayerState(packet),
             onRemoteGameEvent: (packet) => this.gameEngine?.handleRemoteGameEvent(packet),
-            onWorldState: (packet) => this.gameEngine?.handleWorldState(packet)
+            onWorldState: (packet) => this.gameEngine?.handleWorldState(packet),
+            onPlayerLeft: (peerId) => this.gameEngine?.handlePlayerLeft(peerId),
+            onHostLeft: () => this.notifyPlayer("L'hôte a quitté la partie : le match est terminé."),
+            onRoomFull: () => this.notifyPlayer('Salon complet : il y a déjà 10 joueurs (5 contre 5).'),
+            onTeamFull: (team) => this.notifyPlayer(`L'équipe ${team} est complète (5 joueurs).`),
+            onOnlyHostCanStart: () => this.notifyPlayer("Seul l'hôte (celui qui a créé le salon) peut lancer le match.")
         });
 
         // 3. Initialiser la Scène 3D du Salon Multijoueur (aperçu des joueurs connectés)
@@ -234,6 +239,15 @@ class CourtKingsApp {
         if (joinInput && !joinInput.value) joinInput.value = code;
     }
 
+    // Message au joueur : bandeau du terrain pendant un match, fenêtre simple ailleurs
+    notifyPlayer(message) {
+        if (this.currentScreen === 'match' && this.gameEngine?.isRunning) {
+            this.gameEngine.showRuleAlert(message, false);
+        } else {
+            window.alert(message);
+        }
+    }
+
     switchScreen(screenName) {
         this.currentScreen = screenName;
         document.querySelectorAll('.app-screen').forEach((sec) => {
@@ -319,7 +333,8 @@ class CourtKingsApp {
         const total = players.length;
         players.forEach((p, idx) => {
             const mesh = new CharacterMesh({ ...p.profile, team: p.team });
-            const spacing = 1.65;
+            // Resserrer quand il y a beaucoup de joueurs (jusqu'à 10) pour qu'ils tiennent tous à l'écran
+            const spacing = Math.min(1.65, 11 / Math.max(total, 1));
             const offsetX = (idx - (total - 1) / 2) * spacing;
             mesh.root.position.set(offsetX, 0, 0);
             this.lobbyScene.add(mesh.root);

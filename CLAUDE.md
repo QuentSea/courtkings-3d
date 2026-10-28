@@ -86,6 +86,17 @@
   - Le lien rapide du salon prend l'adresse de la page (`origin + pathname`) : il marche tel quel en ligne.
 - **Netlify abandonné** : site `courtkings-3d` créé mais vide (publication refusée : crédits du compte épuisés).
   `netlify.toml` reste dans le dossier, sans effet sur GitHub Pages.
+- **Jusqu'à 10 joueurs** (28 octobre 2026), réseau en étoile : chaque invité n'est relié qu'à l'hôte (PeerJS).
+  - `MAX_PER_TEAM = 5` (`NetworkManager`) : le 11e reçoit `ROOM_FULL` ; passage dans une équipe pleine refusé
+    (en local et par l'hôte). Seul l'hôte peut lancer (`startMatch`), et il monte le mode si besoin
+    (4 humains dans une équipe en 3v3 → 4v4, 5 → 5v5).
+  - Départ d'un invité (fermeture PeerJS, `conn.lobbyPeerId`) : retiré du salon ; en match, l'IA de l'hôte
+    reprend son joueur (`handlePlayerLeft`). Départ de l'hôte : message « match terminé » chez les invités.
+  - `WORLD_STATE` arrondi au centimètre : ~1,5 Ko en 5v5, ~2 Mbit/s envoyés par l'hôte pour 9 invités.
+  - Testé : hôte + 1 vrai invité + 8 invités simulés (instances `NetworkManager` sans 3D, PeerJS seul, importées
+    dans un onglet) → 10 joueurs 5/5, 11e refusé, 3v3 → 5v5 avec 10 humains, ~18 états/s reçus par chacun,
+    hôte à 145 images/s, départ en match remplacé par l'IA, aucune erreur. Ouvrir 10 onglets 3D sature le
+    navigateur intégré (contextes WebGL) : utiliser des invités simulés.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

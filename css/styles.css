@@ -1375,13 +1375,16 @@ body {
     background: rgba(9, 13, 22, 0.88);
     border: 1px solid var(--border-subtle);
     padding: 8px 18px;
-    border-radius: 99px;
+    border-radius: 14px;
     display: flex;
-    gap: 16px;
-    font-size: 0.76rem;
+    gap: 6px 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: max-content;
+    max-width: calc(100% - 32px);
+    font-size: 0.72rem;
     color: #cbd5e1;
     z-index: 20;
-    white-space: nowrap;
 }
 
 kbd {
@@ -1413,3 +1416,83 @@ kbd {
     pointer-events: none;
 }
 .hud-tactics:empty { display: none; }
+
+.controls-change-btn {
+    background: none;
+    border: 1px solid var(--accent-blue);
+    border-radius: 99px;
+    color: var(--accent-blue);
+    font: inherit;
+    padding: 1px 10px;
+    cursor: pointer;
+}
+
+/* Fenêtre « Touches » (Bindings.js) */
+.bindings-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(2, 6, 23, 0.7);
+}
+.bindings-card {
+    width: min(920px, 100%);
+    max-height: calc(100% - 8px);
+    overflow-y: auto;
+    background: rgba(15, 23, 42, 0.97);
+    border: 2px solid var(--accent-blue);
+    border-radius: 16px;
+    padding: 20px;
+    color: var(--text-main);
+}
+.bindings-card h2 {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    margin-bottom: 8px;
+}
+.bindings-help {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    margin: 8px 0;
+}
+.bindings-table-wrap { overflow-x: auto; }
+.bindings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+.bindings-table th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 6px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.bindings-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.bindings-action { min-width: 220px; }
+.bindings-cell {
+    width: 100%;
+    min-width: 96px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid #475569;
+    background: #1e293b;
+    color: var(--text-main);
+    font-family: var(--font-display);
+    cursor: pointer;
+}
+.bindings-cell:hover, .bindings-cell:focus-visible { border-color: var(--accent-blue); outline: none; }
+.bindings-cell.shared { border-color: var(--accent-orange); color: #fed7aa; }
+.bindings-cell.waiting { border-color: var(--accent-gold); color: var(--accent-gold); }
+.bindings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}

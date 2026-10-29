@@ -6,6 +6,7 @@
 import { POSITIONS } from '../config/constants.js';
 import { SCREENED_SPEED, SCREEN_MIN_TIME } from './Screens.js';
 import { FT_DISTANCE } from './Fouls.js';
+import { ACTION_ORDER } from './Bindings.js';
 
 export const ControlsMethods = {
     bindGamepadEvents() {
@@ -32,70 +33,65 @@ export const ControlsMethods = {
 
     bindControls() {
         window.addEventListener('keydown', (e) => {
+            // Saisie dans un champ (nom du joueur, salon) ou fenêtre « Touches » ouverte : pas pour le jeu
+            if (e.target.closest?.('input, textarea, select') || this.bindingsOpen) return;
+            const bound = this.bindings.actionsFor('keys', e.code);
+            if (bound.length && this.isRunning) e.preventDefault(); // Espace et flèches ne font pas défiler la page
             if (!this.isRunning || this.matchRules.matchOver) return;
-            const code = e.code;
-            this.keys[code] = true;
+            this.keys[e.code] = true;
 
             const me = this.getLocalEntity();
-            if (!me) return;
-
-            // ESPACE : Tir (si porteur du ballon) ou Saut de Contre (si défenseur)
-            if (code === 'Space' && !e.repeat) {
-                e.preventDefault();
-                this.handleActionShootOrBlockPress(me);
-            }
-
-            // R ou Clic / Y : Saut dédié pour Contre ou Rebond
-            if (code === 'KeyR' && !e.repeat) {
-                e.preventDefault();
-                if (this.ball.holderId !== me.id) {
-                    this.triggerJumpBlock(me);
-                }
-            }
-
-            // E : Passe directionnelle vers le coéquipier visé (ou Demander la balle si un Bot l'a)
-            if (code === 'KeyE' && !e.repeat) {
-                this.handleActionPassOrCall(me);
-            }
-
-            // T : Alley-oop (avec ballon : passe lobée au coéquipier visé ; sans : le demander au bot porteur)
-            if (code === 'KeyT' && !e.repeat) {
-                this.handleActionAlleyOop(me);
-            }
-
-            // C : Crossover rapide (près du cercle : euro step)
-            if (code === 'KeyC' && !e.repeat) {
-                this.triggerCrossover(me);
-            }
-
-            // B : Écran (« block ») — sans ballon : poser l'écran ; avec ballon : en demander un
-            if (code === 'KeyB' && !e.repeat) {
-                this.handleActionScreen(me);
-            }
-
-            // F : Tentative d'interception (Steal)
-            if (code === 'KeyF' && !e.repeat) {
-                this.tryStealBall(me);
-            }
-
-            // V : Changer l'angle de caméra (2K Cam <-> Vue Suivi)
-            if (code === 'KeyV' && !e.repeat) {
-                this.toggleCameraMode();
-            }
+            if (!me || e.repeat) return;
+            this.runActions(bound, me);
         });
 
         window.addEventListener('keyup', (e) => {
+            this.keys[e.code] = false;
             if (!this.isRunning) return;
-            const code = e.code;
-            this.keys[code] = false;
-
             const me = this.getLocalEntity();
             if (!me) return;
-
-            if (code === 'Space' && this.shotMeter.active && this.ball.holderId === me.id) {
+            // Touche de tir relâchée : le tir part
+            if (this.bindings.keys.shoot.includes(e.code) && this.shotMeter.active && this.ball.holderId === me.id) {
                 this.executeShotRelease(me);
             }
         });
+    },
+
+    /** Action tenue au clavier (déplacement, sprint, posture) */
+    isKeyHeld(actionId) {
+        return this.bindings.keys[actionId].some(code => code && this.keys[code]);
+    },
+
+    /** L'action a-t-elle du sens maintenant ? (une touche partagée lance la première qui en a) */
+    canRunAction(actionId, me) {
+        const hasBall = this.ball.holderId === me.id;
+        const offense = this.matchRules.possessionTeam === me.team;
+        switch (actionId) {
+            case 'alleyoop': {
+                const holder = this.entities.get(this.ball.holderId);
+                return hasBall || (!!holder && holder.isBot && holder.team === me.team && this.ball.state === 'HELD');
+            }
+            case 'crossover': return hasBall;
+            case 'screen': return offense;
+            case 'steal': return !offense;
+            case 'jump': return !hasBall;
+            default: return true; // tir, passe, caméra
+        }
+    },
+
+    /** Touche ou bouton appuyé : lance la première action possible parmi celles qui y sont liées */
+    runActions(actionIds, me) {
+        const id = ACTION_ORDER.find(a => actionIds.includes(a) && this.canRunAction(a, me));
+        if (!id) return null;
+        if (id === 'shoot') this.handleActionShootOrBlockPress(me);
+        else if (id === 'pass') this.handleActionPassOrCall(me);
+        else if (id === 'alleyoop') this.handleActionAlleyOop(me);
+        else if (id === 'crossover') this.triggerCrossover(me);
+        else if (id === 'screen') this.handleActionScreen(me);
+        else if (id === 'steal') this.tryStealBall(me);
+        else if (id === 'jump') this.triggerJumpBlock(me);
+        else if (id === 'camera') this.toggleCameraMode();
+        return id;
     },
 
     handleActionShootOrBlockPress(me) {
@@ -135,7 +131,7 @@ export const ControlsMethods = {
 
     /** Sprint tenu (clavier ou manette) : décide dunk ou lay-up près du cercle */
     isSprintHeld() {
-        return !!(this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.padSprint);
+        return this.isKeyHeld('sprint') || !!this.padSprint;
     },
 
     handleActionAlleyOop(me) {
@@ -170,17 +166,8 @@ export const ControlsMethods = {
     },
 
     /**
-     * Lecture de la Manette (Standard Gamepad Mapping : Xbox / PlayStation)
-     * - Stick Gauche (axes 0, 1) : Déplacement + Direction de visée de passe
-     * - Stick Droit (axes 2, 3) : Direction de visée de passe prioritaire ou Crossover rapide
-     * - Bouton 0 (A / Croix) : Passer au coéquipier visé / Demander la balle
-     * - Bouton 2 (X / Carré) : Maintenir pour Tirer (Jauge de Tir) / Relâcher au Vert
-     * - Bouton 1 (B / Rond) : Crossover (porteur) / Écran (attaquant sans ballon) / Interception (en défense)
-     * - LB / L1 (Bouton 4) en attaque : Demander un écran (porteur) / Poser un écran
-     * - Bouton 3 (Y / Triangle) : Saut / Contre / Rebond
-     * - RT / R2 (Bouton 7) ou RB (Bouton 5) : Sprint
-     * - LT / L2 (Bouton 6) : Posture défensive (Lockdown)
-     * - Select / Back (Bouton 8) : Changer Caméra (2K Cam / Suivi)
+     * Lecture de la Manette (disposition standard : Xbox / PlayStation). Boutons réglables dans « Touches »
+     * (Bindings.js) ; stick gauche = déplacement + visée de passe, stick droit = visée de passe prioritaire.
      */
     pollGamepadInput() {
         if (!navigator.getGamepads) return null;
@@ -205,8 +192,8 @@ export const ControlsMethods = {
         const rawRX = activePad.axes[2] || 0;
         const rawRY = activePad.axes[3] || 0;
 
-        const moveX = Math.abs(rawLX) > deadzone ? rawLX : 0;
-        const moveZ = Math.abs(rawLY) > deadzone ? rawLY : 0;
+        let moveX = Math.abs(rawLX) > deadzone ? rawLX : 0;
+        let moveZ = Math.abs(rawLY) > deadzone ? rawLY : 0;
 
         const rightStickX = Math.abs(rawRX) > 0.35 ? rawRX : 0;
         const rightStickZ = Math.abs(rawRY) > 0.35 ? rawRY : 0;
@@ -216,63 +203,30 @@ export const ControlsMethods = {
             if (!b) return false;
             return typeof b === 'object' ? (b.pressed || b.value > 0.5) : b > 0.5;
         };
-
+        const held = (actionId) => this.bindings.pad[actionId].some(i => i !== null && isPressed(i));
         const wasPressed = (idx) => !!this.gamepadState.prevButtons[idx];
-        const justPressed = (idx) => isPressed(idx) && !wasPressed(idx);
-        const justReleased = (idx) => !isPressed(idx) && wasPressed(idx);
 
         const me = this.getLocalEntity();
-        if (me && !this.matchRules.matchOver) {
-            // Bouton A / Croix (0) : Passe directionnelle ou Demander la passe
-            if (justPressed(0)) {
-                this.handleActionPassOrCall(me);
+        // Fenêtre « Touches » ouverte : la manette sert au réglage, pas au match
+        const playing = !!me && !this.matchRules.matchOver && !this.bindingsOpen;
+        if (playing) {
+            for (let i = 0; i < activePad.buttons.length; i++) {
+                if (!isPressed(i) || wasPressed(i)) continue;
+                // Le tir part quand on relâche le bouton qui l'a lancé
+                if (this.runActions(this.bindings.actionsFor('pad', i), me) === 'shoot') this.gamepadState.shootButton = i;
             }
-
-            // Bouton X / Carré (2) : Tirer (Maintenir & Relâcher) ou Contrer en défense
-            if (justPressed(2)) {
-                this.gamepadState.isHoldingShoot = true;
-                this.handleActionShootOrBlockPress(me);
+            const shootBtn = this.gamepadState.shootButton;
+            if (shootBtn !== null && !isPressed(shootBtn)) {
+                this.gamepadState.shootButton = null;
+                if (this.shotMeter.active && this.ball.holderId === me.id) this.executeShotRelease(me);
             }
-            if (justReleased(2) && this.gamepadState.isHoldingShoot) {
-                this.gamepadState.isHoldingShoot = false;
-                if (this.shotMeter.active && this.ball.holderId === me.id) {
-                    this.executeShotRelease(me);
-                }
-            }
-
-            // Bouton B / Rond (1) : Crossover (si porteur), Écran (attaquant sans ballon) ou Interception (défenseur)
-            if (justPressed(1)) {
-                if (this.ball.holderId === me.id) {
-                    this.triggerCrossover(me);
-                } else if (this.matchRules.possessionTeam === me.team) {
-                    this.handleActionScreen(me);
-                } else {
-                    this.tryStealBall(me);
-                }
-            }
-
-            // LB / L1 (4) en attaque : demander un écran (avec ballon) ou en poser un
-            if (justPressed(4) && this.matchRules.possessionTeam === me.team) {
-                this.handleActionScreen(me);
-            }
-
-            // Bouton Y / Triangle (3) : alley-oop (porteur, ou coéquipier d'un bot porteur), sinon Saut / Contre / Rebond
-            if (justPressed(3)) {
-                const holder = this.entities.get(this.ball.holderId);
-                if (holder && holder.team === me.team && this.ball.state === 'HELD' && (holder === me || holder.isBot)) {
-                    this.handleActionAlleyOop(me);
-                } else {
-                    this.triggerJumpBlock(me);
-                }
-            }
-
-            // Bouton Back / Select (8) : Changer Caméra
-            if (justPressed(8)) {
-                this.toggleCameraMode();
+            // Boutons de déplacement (croix par défaut) quand le stick ne bouge pas
+            if (moveX === 0 && moveZ === 0) {
+                moveX = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
+                moveZ = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
             }
         }
-
-        this.padSprint = isPressed(7) || isPressed(5);
+        this.padSprint = playing && held('sprint');
 
         // Sauvegarder l'état des boutons pour la frame suivante
         const nextButtons = {};
@@ -280,14 +234,15 @@ export const ControlsMethods = {
             nextButtons[i] = isPressed(i);
         }
         this.gamepadState.prevButtons = nextButtons;
+        if (!playing) return null;
 
         return {
             moveX,
             moveZ,
             rightStickX,
             rightStickZ,
-            sprint: isPressed(7) || isPressed(5),  // R2 / RT ou R1 / RB
-            defend: isPressed(6) || isPressed(4)   // L2 / LT ou L1 / LB
+            sprint: this.padSprint,
+            defend: held('defend')
         };
     },
 
@@ -315,11 +270,11 @@ export const ControlsMethods = {
         let moveX = 0;
         let moveZ = 0;
 
-        // Entrées Clavier (WASD / ZQSD / Flèches)
-        if (this.keys['KeyW'] || this.keys['KeyZ'] || this.keys['ArrowUp']) moveZ -= 1;
-        if (this.keys['KeyS'] || this.keys['ArrowDown']) moveZ += 1;
-        if (this.keys['KeyA'] || this.keys['KeyQ'] || this.keys['ArrowLeft']) moveX -= 1;
-        if (this.keys['KeyD'] || this.keys['ArrowRight']) moveX += 1;
+        // Entrées Clavier (touches réglables, Bindings.js)
+        if (this.isKeyHeld('up')) moveZ -= 1;
+        if (this.isKeyHeld('down')) moveZ += 1;
+        if (this.isKeyHeld('left')) moveX -= 1;
+        if (this.isKeyHeld('right')) moveX += 1;
 
         // Entrées Stick Gauche Manette
         if (padInput && (padInput.moveX !== 0 || padInput.moveZ !== 0)) {
@@ -345,8 +300,8 @@ export const ControlsMethods = {
             ? 0.85 + ((me.profile.attributes?.dribble || 80) / 99) * 0.25
             : 0.88 + ((me.profile.attributes?.defense || 80) / 99) * 0.22;
 
-        const isSprinting = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || (padInput && padInput.sprint);
-        const isDefending = this.keys['ShiftLeft'] || this.keys['KeyF'] || (padInput && padInput.defend);
+        const isSprinting = this.isKeyHeld('sprint') || (padInput && padInput.sprint);
+        const isDefending = this.isKeyHeld('defend') || (padInput && padInput.defend);
         // Posture défensive pendant un tir adverse : box-out (Moves.js)
         this.updateLocalBoxOut(me, isDefending);
         const screened = me.screenedTimer > 0 ? SCREENED_SPEED : 1;

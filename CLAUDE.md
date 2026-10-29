@@ -272,6 +272,24 @@
          à 3 pts, euro step, alley-oop + passe décisive, menus) ; hôte + invité (tactique de l'invité appliquée,
          2 lancers de l'invité, alley-oop demandé par l'invité au bot : 2 pts comptés chez l'hôte).
        - Pas fait : exclusion à 5/6 fautes personnelles, règle des 8 s, retour en zone.
+- **Touches réglables** (29 octobre 2026, demandé par le joueur) — `js/gameplay/Bindings.js` :
+  - `ACTIONS` : 14 actions (4 déplacements, tir, passe, alley-oop, saut, crossover, écran, interception, sprint,
+    posture, caméra), chacune avec 2 touches clavier (`KeyboardEvent.code`, physique : le nom affiché vient de
+    `navigator.keyboard.getLayoutMap`, « Z » sur AZERTY pour `KeyW`) et 2 boutons de manette (disposition standard).
+    `KeyBindings` : `localStorage` `courtkings_touches` (valeurs vérifiées une par une, défaut sinon), `reset`.
+  - Une touche peut servir à plusieurs actions : `runActions` (Controls.js) joue la première de `ACTION_ORDER`
+    qui a du sens (`canRunAction` : crossover avec ballon, écran en attaque, interception en défense, saut sans
+    ballon, alley-oop si on a le ballon ou si un bot coéquipier l'a). Par défaut, la manette garde les boutons
+    partagés d'avant (Rond = crossover / écran / interception, Y = alley-oop / saut).
+  - Fenêtre `#bindings-overlay` (`BindingsPanel`) : bouton « 🎮 Touches » du HUD et « ⚙️ Changer les touches »
+    du bandeau ; clic sur une case puis touche ou bouton (manette lue toutes les 50 ms) ; Échap annule, Retour
+    arrière efface ; case orange = touche partagée. Pendant l'ouverture `engine.bindingsOpen` : le jeu ignore
+    clavier et manette. Les touches ne sont plus lues quand on écrit dans un champ (`input`, `select`).
+  - Bandeau du bas `#controls-legend` refait à chaque changement (`renderControlsLegend`). Croix de la manette
+    = déplacement par défaut (si le stick ne bouge pas). Sticks non réglables.
+  - Testé : tir passé sur G (Espace ne tire plus, G lance et relâche le tir, gardé dans le navigateur), manette
+    simulée (passe sur RB, A ne passe plus, X maintenu/relâché tire, croix ↑ fait bouger), touches par défaut,
+    Échap ferme. Vraie manette pas testée.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

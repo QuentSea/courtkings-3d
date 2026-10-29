@@ -37,6 +37,7 @@ import { MatchSheetMethods } from './MatchSheet.js';
 import { FoulMethods } from './Fouls.js';
 import { MoveMethods } from './Moves.js';
 import { TacticMethods } from './Tactics.js';
+import { KeyBindings, ACTIONS } from './Bindings.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -61,8 +62,11 @@ export class GameEngine {
             connected: false,
             id: '',
             prevButtons: {},
-            isHoldingShoot: false
+            shootButton: null // bouton qui a lancé la jauge de tir (le tir part quand on le relâche)
         };
+        // Touches réglables (Bindings.js) ; bindingsOpen : fenêtre « Touches » ouverte, le jeu ignore les commandes
+        this.bindings = new KeyBindings();
+        this.bindingsOpen = false;
 
         // État du Ballon & Règles
         this.ball = {
@@ -313,6 +317,39 @@ export class GameEngine {
 
         this.entities.set(id, entity);
         return entity;
+    }
+
+    /** Bandeau du bas : rappel des touches actuelles (manette puis clavier) */
+    renderControlsLegend() {
+        const bar = document.getElementById('controls-legend');
+        if (!bar) return;
+        const b = this.bindings;
+        const keysOf = (id) => b.keys[id].filter(Boolean).map(c => b.keyName(c));
+        const padOf = (id) => b.pad[id].filter(v => v !== null).map(i => b.padName(i));
+        const item = (keys, text) => {
+            const span = document.createElement('span');
+            for (const k of keys) {
+                const kbd = document.createElement('kbd');
+                kbd.textContent = k;
+                span.append(kbd, ' ');
+            }
+            span.append(text);
+            return span;
+        };
+        const moveKeys = ['up', 'left', 'down', 'right'].map(id => keysOf(id)[0]).filter(Boolean).join(' ');
+        const items = [item(['Stick G', moveKeys], 'Bouger / viser la passe')];
+        for (const a of ACTIONS) {
+            if (['up', 'down', 'left', 'right'].includes(a.id)) continue;
+            const keys = [...padOf(a.id), ...keysOf(a.id)];
+            if (keys.length) items.push(item(keys, a.label));
+        }
+        const change = document.createElement('button');
+        change.type = 'button';
+        change.className = 'controls-change-btn';
+        change.textContent = '⚙️ Changer les touches';
+        change.addEventListener('click', () => this.bindingsPanel?.open());
+        items.push(change);
+        bar.replaceChildren(...items);
     }
 
     getLocalEntity() {

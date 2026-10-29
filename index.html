@@ -362,6 +362,7 @@
                 <button type="button" class="hud-btn active" data-hud-mode="3v3">3v3 Half</button>
                 <button type="button" class="hud-btn" data-hud-mode="4v4">4v4 Half</button>
                 <button type="button" class="hud-btn" data-hud-mode="5v5">5v5 Full</button>
+                <button type="button" id="btn-hud-bindings" class="hud-btn" title="Changer les touches du clavier et de la manette">🎮 Touches</button>
                 <button type="button" id="btn-hud-builder" class="hud-btn">Mon Joueur</button>
                 <button type="button" id="btn-hud-lobby" class="hud-btn">Salon</button>
             </div>
@@ -421,19 +422,26 @@
         <!-- VIEWPORT 3D DU TERRAIN -->
         <div id="match-3d-viewport" class="match-3d-canvas"></div>
 
-        <!-- AIDE CONTRÔLES EN BAS (CLAVIER & MANETTE) -->
-        <div class="controls-Overlay-bar">
-            <span><kbd>Stick G</kbd> / <kbd>ZQSD</kbd> Bouger & Viser Passe</span>
-            <span><kbd>A / ✕</kbd> / <kbd>E</kbd> Passer au joueur visé (Cercle Jaune)</span>
-            <span><kbd>X / ▢</kbd> / <kbd>Espace</kbd> Tirer (Green) · près du cercle : lay-up, + <kbd>Shift</kbd> dunk · en reculant : step-back / fadeaway</span>
-            <span><kbd>Y / △</kbd> / <kbd>T</kbd> Alley-oop (avec ballon : lob ; sans : le demander)</span>
-            <span><kbd>Y / △</kbd> / <kbd>Espace</kbd> / <kbd>R</kbd> Sauter / Contrer / Rebond</span>
-            <span><kbd>B / ◯</kbd> / <kbd>C / F</kbd> Crossover (près du cercle : euro step) / Interception</span>
-            <span><kbd>L1 / ◯</kbd> / <kbd>B</kbd> Écran (avec ballon : en demander un)</span>
-            <span><kbd>R2 / Shift</kbd> Sprint</span>
-            <span><kbd>L2</kbd> / <kbd>F</kbd> Défense (pendant un tir adverse : box-out)</span>
-        </div>
+        <!-- AIDE CONTRÔLES EN BAS (CLAVIER & MANETTE) : remplie selon les touches choisies (renderControlsLegend) -->
+        <div id="controls-legend" class="controls-Overlay-bar"></div>
     </section>
+
+    <!-- FENÊTRE « TOUCHES » (Bindings.js) : au-dessus de tous les écrans -->
+    <div id="bindings-overlay" class="bindings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="bindings-title">
+        <div class="bindings-card">
+            <h2 id="bindings-title">🎮 Touches du clavier et de la manette</h2>
+            <p class="bindings-help">Clique sur une case, puis appuie sur la touche (ou le bouton de la manette).
+                <kbd>Échap</kbd> annule, <kbd>Retour arrière</kbd> efface la case. Une case orange : la touche sert aussi à
+                une autre action (c'est permis : la première qui a du sens est jouée).</p>
+            <div class="bindings-table-wrap"><table id="bindings-table" class="bindings-table"></table></div>
+            <p class="bindings-help">Manette : le stick gauche fait bouger et viser, le stick droit vise les passes (pas réglables).
+                Les touches sont gardées dans ce navigateur.</p>
+            <div class="bindings-actions">
+                <button type="button" id="btn-bindings-reset" class="hud-btn">Touches par défaut</button>
+                <button type="button" id="btn-bindings-close" class="btn-primary-glow">Fermer</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="./js/main.js"></script>
 </body>

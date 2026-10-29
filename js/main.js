@@ -14,6 +14,7 @@ import { createCharacterMesh } from './character/createCharacter.js';
 import { loadCharacterAssets } from './character/CharacterAssets.js';
 import { NetworkManager } from './network/NetworkManager.js';
 import { GameEngine } from './gameplay/GameEngine.js';
+import { BindingsPanel } from './gameplay/Bindings.js';
 import { setupRenderer } from './render/RenderSetup.js';
 
 class CourtKingsApp {
@@ -232,6 +233,14 @@ class CourtKingsApp {
         document.getElementById('btn-match-end-lobby')?.addEventListener('click', () => {
             this.gameEngine.hideMatchEnd();
             this.switchScreen('lobby');
+        });
+
+        // Touches réglables (Bindings.js) : fenêtre « Touches » et rappel en bas de l'écran du match
+        this.gameEngine.bindingsPanel = new BindingsPanel(this.gameEngine);
+        this.gameEngine.renderControlsLegend();
+        document.getElementById('btn-hud-bindings')?.addEventListener('click', (e) => {
+            e.currentTarget.blur();
+            this.gameEngine.bindingsPanel.open();
         });
 
         // Tactiques de l'équipe du joueur (Tactics.js) : l'hôte décide, un invité envoie son choix

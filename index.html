@@ -57,6 +57,16 @@
         <div class="builder-layout">
             <!-- COLONNE GAUCHE : 10 PRESETS & APPARENCE MODULAIRE 3D -->
             <aside class="builder-panel left-panel">
+                <!-- PROGRESSION (Career.js) : niveau, expérience, bilan ; historique et records dans une fenêtre -->
+                <div class="panel-section career-card">
+                    <div class="section-header">
+                        <h2 id="career-level">⭐ NIVEAU 1</h2>
+                        <button type="button" id="btn-career" class="section-tag career-open">HISTORIQUE & RECORDS</button>
+                    </div>
+                    <div class="career-xp-track"><div id="career-xp-fill" class="career-xp-fill"></div></div>
+                    <p id="career-summary" class="career-summary">0 / 200 XP · 0 victoire · 0 défaite</p>
+                </div>
+
                 <div class="panel-section">
                     <div class="section-header">
                         <h2>10 PRESETS DE LÉGENDES</h2>
@@ -398,6 +408,7 @@
                 <p id="match-end-score" class="match-end-score">ÉQUIPE A 21 — 15 ÉQUIPE B</p>
                 <p id="match-end-reason" class="match-end-reason"></p>
                 <p id="match-end-mvp" class="match-end-mvp"></p>
+                <p id="match-end-xp" class="match-end-xp"></p>
 
                 <!-- FEUILLE DE MATCH -->
                 <div class="sheet-tabs">
@@ -442,6 +453,20 @@
         <!-- AIDE CONTRÔLES EN BAS (CLAVIER & MANETTE) : remplie selon les touches choisies (renderControlsLegend) -->
         <div id="controls-legend" class="controls-Overlay-bar"></div>
     </section>
+
+    <!-- FENÊTRE « HISTORIQUE & RECORDS » (Career.js) -->
+    <div id="career-overlay" class="bindings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="career-title">
+        <div class="bindings-card">
+            <h2 id="career-title">📊 Ma carrière</h2>
+            <p id="career-overview" class="bindings-help"></p>
+            <div id="career-records" class="career-records"></div>
+            <h3 class="career-subtitle">20 derniers matchs</h3>
+            <div class="bindings-table-wrap"><table id="career-history" class="bindings-table career-history"></table></div>
+            <div class="bindings-actions">
+                <button type="button" id="btn-career-close" class="btn-primary-glow">Fermer</button>
+            </div>
+        </div>
+    </div>
 
     <!-- FENÊTRE « TOUCHES » (Bindings.js) : au-dessus de tous les écrans -->
     <div id="bindings-overlay" class="bindings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="bindings-title">

@@ -21,6 +21,7 @@ import {
 } from '../config/constants.js';
 import { createCharacterMesh } from './createCharacter.js';
 import { setupRenderer } from '../render/RenderSetup.js';
+import { bonusPoints } from '../progress/Career.js';
 
 export class CharacterBuilder {
     constructor(canvasContainerId, onConfirmCallback) {
@@ -164,8 +165,9 @@ export class CharacterBuilder {
         );
     }
 
+    /** Points d'atouts encore libres : le pool de départ plus ceux gagnés avec les niveaux (Career.js) */
     getRemainingPoints() {
-        return ATTRIBUTE_POOL.TOTAL_BONUS_POINTS - this.getUsedBonusPoints();
+        return ATTRIBUTE_POOL.TOTAL_BONUS_POINTS + bonusPoints() - this.getUsedBonusPoints();
     }
 
     clampAttributesToPositionCaps() {

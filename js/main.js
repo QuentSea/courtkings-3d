@@ -16,6 +16,7 @@ import { NetworkManager } from './network/NetworkManager.js';
 import { GameEngine } from './gameplay/GameEngine.js';
 import { BindingsPanel } from './gameplay/Bindings.js';
 import { setupRenderer } from './render/RenderSetup.js';
+import { renderCareerCard, bindCareerWindow } from './progress/CareerUI.js';
 
 class CourtKingsApp {
     constructor() {
@@ -48,6 +49,15 @@ class CourtKingsApp {
 
         // 4. Initialiser le Moteur de Jeu 3D (Étapes 3 et 4)
         this.gameEngine = new GameEngine('match-3d-viewport', this.network);
+
+        // Progression (Career.js) : carte du créateur, fenêtre d'historique ; après un match, les points d'atouts
+        // gagnés apparaissent dans le créateur
+        renderCareerCard();
+        bindCareerWindow();
+        this.gameEngine.onCareerChanged = () => {
+            renderCareerCard();
+            this.builder.syncUIFromProfile();
+        };
 
         this.bindGlobalNavigation();
         this.checkURLInviteCode();

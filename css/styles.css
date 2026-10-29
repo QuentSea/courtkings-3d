@@ -1249,6 +1249,54 @@ body {
     margin-bottom: 6px;
 }
 
+/* Expérience gagnée (Career.js) ; niveau supérieur en doré */
+.match-end-xp {
+    color: var(--accent-blue);
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+}
+.match-end-xp:empty { display: none; }
+.match-end-xp.level-up { color: var(--accent-gold); }
+
+/* Carte « Niveau » du créateur et fenêtre « Historique & records » (CareerUI.js) */
+.career-card .section-header h2 { color: var(--accent-gold); }
+.career-open { cursor: pointer; border: none; font: inherit; }
+.career-xp-track {
+    height: 8px;
+    border-radius: 99px;
+    background: rgba(148, 163, 184, 0.18);
+    overflow: hidden;
+}
+.career-xp-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-gold));
+}
+.career-summary {
+    margin-top: 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.career-records {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+}
+.career-record {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.8);
+}
+.career-record strong { font-family: var(--font-display); font-size: 1.3rem; color: var(--accent-gold); }
+.career-record span { font-size: 0.75rem; color: var(--text-muted); }
+.career-subtitle { margin: 6px 0; font-size: 0.95rem; }
+.career-history tr.won td:nth-child(3) { color: #4ade80; }
+.career-history tr.lost td:nth-child(3) { color: var(--accent-red); }
+
 /* FEUILLE DE MATCH (écran de fin) */
 .sheet-tabs {
     display: flex;

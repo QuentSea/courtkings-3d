@@ -8,6 +8,8 @@
  * Méthodes ajoutées au prototype de GameEngine (voir la fin de GameEngine.js) : `this` est le moteur.
  */
 
+import { recordMatch, POINTS_PER_LEVEL } from '../progress/Career.js';
+
 export const SHOT_CLOCK = 24;
 const OFFENSIVE_REBOUND_CLOCK = 14;
 const BOT_HURRY = 3.5; // sous ce temps de tir, un bot porteur tire tout de suite
@@ -29,6 +31,9 @@ export const ClockMethods = {
         this.resetFouls();   // Fouls.js
         this.resetTactics(); // Tactics.js
         this.hideMatchEnd();
+        this.careerDone = false; // expérience du match pas encore comptée (awardCareer)
+        const xp = document.getElementById('match-end-xp');
+        if (xp) xp.textContent = '';
         this.lastClockText = null;
         this.lastShotText = null;
     },
@@ -220,6 +225,7 @@ export const ClockMethods = {
             ? `Meilleur marqueur : ${best.profile.playerName} (équipe ${best.team}) — ${pts(best)} pts`
             : '';
         this.renderMatchSheet();
+        this.awardCareer();
 
         // Seul l'hôte peut relancer (il décide pour tout le salon)
         const isHost = this.network.isHost;
@@ -230,6 +236,31 @@ export const ClockMethods = {
 
     hideMatchEnd() {
         document.getElementById('match-end-overlay')?.classList.add('hidden');
+    },
+
+    /**
+     * Fin de match : expérience, historique et records du joueur local (Career.js), une fois par match.
+     * Chez un invité, la feuille de match arrive un peu après la fin : rappelé quand elle arrive (MatchSheet.js)
+     */
+    awardCareer() {
+        const me = this.getLocalEntity();
+        const r = this.matchRules;
+        if (!me || this.careerDone || !r.matchOver || this.currentMode.practice) return;
+        const stats = this.matchSheet.stats[me.id];
+        if (!stats && !this.isAuthority) return;
+        this.careerDone = true;
+        const mine = me.team === 'A' ? r.scoreA : r.scoreB;
+        const theirs = me.team === 'A' ? r.scoreB : r.scoreA;
+        const res = recordMatch({ mode: this.currentMode.id, won: me.team === r.winner, scoreFor: mine, scoreAgainst: theirs, stats });
+        const up = res.after.level - res.before.level;
+        const el = document.getElementById('match-end-xp');
+        if (el) {
+            el.textContent = `⭐ +${res.xp} XP · Niveau ${res.after.level}` +
+                (res.after.need ? ` (${res.after.into} / ${res.after.need} XP)` : ' (maximum)') +
+                (up ? ` — NIVEAU SUPÉRIEUR : +${up * POINTS_PER_LEVEL} points d'atouts à placer dans le créateur !` : '');
+            el.classList.toggle('level-up', up > 0);
+        }
+        this.onCareerChanged?.(); // créateur : niveau et points disponibles (main.js)
     },
 
     /** HUD, écran géant et chronos au-dessus des planches : mis à jour seulement quand l'affichage change */

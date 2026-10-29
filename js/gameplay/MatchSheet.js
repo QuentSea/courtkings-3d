@@ -154,6 +154,7 @@ export const MatchSheetMethods = {
     applySheetPacket(sheet) {
         this.matchSheet = { stats: sheet.stats || {}, log: sheet.log || [] };
         if (!document.getElementById('match-end-overlay')?.classList.contains('hidden')) this.renderMatchSheet();
+        this.awardCareer(); // invité : ses statistiques sont arrivées (Clock.js)
     },
 
     /** Remplit les deux onglets de la feuille de match dans l'écran de fin */

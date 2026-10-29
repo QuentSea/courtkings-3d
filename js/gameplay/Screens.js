@@ -170,6 +170,7 @@ export const ScreenMethods = {
         defender.screenedCooldown = SCREENED_TIME + 0.8;
         if (defender.isLocal) this.showRuleAlert('🧱 BLOQUÉ PAR L\'ÉCRAN !', false);
         if (screener.isLocal) this.showRuleAlert('🧱 ÉCRAN RÉUSSI !', false);
+        if (this.isAuthority) this.onScreenSuccess(screener, defender);
 
         // Les bots défenseurs peuvent changer de joueur (switch) : celui de l'écran prend le porteur
         if (!this.isAuthority || !defender.isBot) return;

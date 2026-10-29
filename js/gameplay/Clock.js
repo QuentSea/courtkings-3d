@@ -25,7 +25,7 @@ export const ClockMethods = {
         r.endReason = '';
         r.goldenPoint = false;
         this.matchToken = (this.matchToken || 0) + 1;
-        for (const ent of this.entities.values()) ent.points = 0;
+        this.resetMatchSheet();
         this.hideMatchEnd();
         this.lastClockText = null;
         this.lastShotText = null;
@@ -51,6 +51,7 @@ export const ClockMethods = {
     updateMatchClock(dt) {
         const r = this.matchRules;
         if (!this.isAuthority || r.matchOver || r.deadBall) return;
+        this.liveTime += dt; // temps de jeu réel, pour les passes décisives (MatchSheet.js)
 
         if (!r.goldenPoint) {
             r.gameClock = Math.max(0, r.gameClock - dt);
@@ -93,7 +94,9 @@ export const ClockMethods = {
     },
 
     shotClockViolation() {
-        const other = this.matchRules.possessionTeam === 'A' ? 'B' : 'A';
+        const team = this.matchRules.possessionTeam;
+        const other = team === 'A' ? 'B' : 'A';
+        this.onShotClockViolation(team, this.ball.state === 'HELD' ? this.ball.holderId : null);
         this.stopPlay();
         this.showRuleAlert(`⏱️ 24 SECONDES ! BALLE À L'ÉQUIPE ${other}`);
         this.scheduleCheckBall(other, 1500);
@@ -113,11 +116,10 @@ export const ClockMethods = {
     /**
      * Points marqués (tir ou dunk, hôte) : score, marqueur, fin de match ou mi-temps, puis remise en jeu
      */
-    scorePoints(team, pts, scorerId) {
+    scorePoints(team, pts, scorerId, kind = 'shot') {
         const r = this.matchRules;
         if (team === 'A') r.scoreA += pts; else r.scoreB += pts;
-        const scorer = this.entities.get(scorerId);
-        if (scorer) scorer.points = (scorer.points || 0) + pts;
+        this.onScored(team, pts, scorerId, kind); // feuille de match
         r.deadBall = true;
         r.shotClockStopped = true;
         this.updateScoreboardUI();
@@ -188,13 +190,15 @@ export const ClockMethods = {
         score.textContent = `ÉQUIPE A ${r.scoreA} — ${r.scoreB} ÉQUIPE B`;
         reason.textContent = `Victoire de l'équipe ${r.winner} : ${r.endReason.toLowerCase()}`;
 
+        const pts = (ent) => this.matchSheet.stats[ent.id]?.pts || 0;
         let best = null;
         for (const ent of this.entities.values()) {
-            if (!best || (ent.points || 0) > (best.points || 0)) best = ent;
+            if (!best || pts(ent) > pts(best)) best = ent;
         }
-        mvp.textContent = best && best.points > 0
-            ? `Meilleur marqueur : ${best.profile.playerName} (équipe ${best.team}) — ${best.points} pts`
+        mvp.textContent = best && pts(best) > 0
+            ? `Meilleur marqueur : ${best.profile.playerName} (équipe ${best.team}) — ${pts(best)} pts`
             : '';
+        this.renderMatchSheet();
 
         // Seul l'hôte peut relancer (il décide pour tout le salon)
         const isHost = this.network.isHost;
@@ -231,7 +235,7 @@ export const ClockMethods = {
     }
 };
 
-function formatClock(seconds) {
+export function formatClock(seconds) {
     const s = Math.ceil(Math.max(0, seconds));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }

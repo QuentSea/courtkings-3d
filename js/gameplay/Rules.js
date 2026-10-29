@@ -93,7 +93,9 @@ export const RulesMethods = {
         }
 
         if (ballCarrier) {
+            this.inCheckBall = true; // une remise en jeu n'est pas une action de la feuille de match
             this.giveBallTo(ballCarrier.id, false);
+            this.inCheckBall = false;
         }
         if (this.pendingHalftimeAlert) {
             this.pendingHalftimeAlert = false;
@@ -109,9 +111,17 @@ export const RulesMethods = {
         if (!player) return;
 
         const prevTeam = this.matchRules.possessionTeam;
+        const prev = {
+            team: prevTeam,
+            state: this.ball.state,
+            holderId: this.ball.holderId,
+            passFromId: this.ball.passFromId,
+            afterShot: this.matchRules.shotClockStopped
+        };
         this.ball.holderId = playerId;
         this.ball.state = 'HELD';
         this.matchRules.possessionTeam = player.team;
+        if (!this.inCheckBall && prev.holderId !== playerId) this.onBallGained(prev, player); // feuille de match
         this.onPossessionGained(prevTeam, player.team); // chrono de tir : 24 s ou 14 s (Clock.js)
 
         if (this.currentMode.isHalfCourt && isDefensiveChange && prevTeam !== player.team) {

@@ -202,6 +202,20 @@
        - Testé : 24 s (balle à B), 14 s après rebond offensif, match de bots jusqu'à 22-15 (fin au score, 2 min 44),
          Rejouer, temps écoulé à 9-7 et à 10-10 (panier en or → B gagne), mi-temps 5v5 à 6:00, hôte + invité (mêmes
          chronos, écran « DÉFAITE » chez l'invité, Rejouer de l'hôte relance les deux), aucune erreur.
+     - ✅ **Feuille de match** — `js/gameplay/MatchSheet.js` (29 octobre 2026, demandée par le joueur) :
+       - L'hôte compte, par joueur (`matchSheet.stats[id]`) : points, tirs à 2 et 3 pts réussis/tentés, dunks,
+         rebonds offensifs/défensifs, passes décisives (passe reçue puis panier en moins de 6 s de jeu,
+         `liveTime`), interceptions, contres, écrans réussis, balles perdues ; et note chaque action avec le temps
+         de match (`matchSheet.log`, 400 lignes maxi ; les passes simples n'y sont pas).
+       - Branchements : `giveBallTo` → `onBallGained` (rebond si `shotClockStopped`, interception si la balle était
+         tenue/en passe par l'autre équipe, passe réussie → `lastPass`), sauf pendant une remise en jeu
+         (`inCheckBall`) ; `launchShotBall` → tirs tentés ; `scorePoints(…, kind)` → `onScored` ; tir raté, dunk,
+         contre (`executeShotBlock` et événement `BLOCK`), écran (`onScreened`), 24 s.
+       - Écran de fin : onglets « Statistiques » (tableau par équipe, sa ligne en vert « (toi) », légende) et
+         « Déroulé du match » (case « Seulement mes actions »). Meilleur marqueur tiré de la feuille.
+       - Invités : la feuille part dans le WORLD_STATE (`sheet`) 2 fois par seconde une fois le match fini.
+       - Testé : match complet (points de la feuille = score, 52 actions, filtre), tir à 3 pts d'un invité compté
+         chez l'hôte et feuille reçue par l'invité, aucune erreur.
      - À faire : alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers
        francs, chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête

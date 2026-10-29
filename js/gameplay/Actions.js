@@ -322,6 +322,7 @@ export const ActionsMethods = {
      * Exécute physiquement le Contre (Block) : dévie violemment le ballon et affiche la bannière
      */
     executeShotBlock(blocker, shooter = null) {
+        if (this.isAuthority) this.onBlock(blocker.id, shooter?.id || this.ball.pendingShotOutcome?.shooterId);
         this.ball.holderId = null;
         this.ball.pendingShotOutcome = null;
         this.ball.state = 'LOOSE';

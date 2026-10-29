@@ -12,6 +12,7 @@ export const BallMethods = {
         this.ball.holderId = null;
         this.ball.state = 'PASS';
         this.ball.passTargetId = toEnt.id;
+        this.ball.passFromId = fromEnt.id; // passes décisives et interceptions (feuille de match)
         this.ball.flightStart.copy(fromEnt.pos).add(new THREE.Vector3(0, 1.35, 0));
         this.ball.flightTarget.copy(toEnt.pos).add(new THREE.Vector3(0, 1.35, 0));
         this.ball.flightTime = 0;
@@ -44,6 +45,7 @@ export const BallMethods = {
         this.ball.flightArcHeight = Math.max(1.2, dist * 0.34);
         // Chrono de tir arrêté jusqu'au prochain porteur (24 s s'il change d'équipe, 14 s mini sinon)
         this.matchRules.shotClockStopped = true;
+        if (this.isAuthority) this.onShotTaken(shooter, !!outcome.isThreePointer);
         this.ball.pendingShotOutcome = {
             ...outcome,
             shooterId: shooter.id,
@@ -196,10 +198,12 @@ export const BallMethods = {
                 this.shotMeter.showFeedback(isPoster ? 'POSTER DUNK !' : 'SLAM DUNK !', Math.round(contest * 100), 'feedback-green', true);
             }
             // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js)
-            this.scorePoints(dunker.team, 2, dunker.id);
+            this.onDunkAttempt(dunker, true);
+            this.scorePoints(dunker.team, 2, dunker.id, 'dunk');
         } else {
             // Dunk raté sur l'arceau (Rim Out) : rebond, le chrono de tir repart à 14 s si l'attaque le reprend
             this.matchRules.shotClockStopped = true;
+            this.onDunkAttempt(dunker, false);
             this.ball.holderId = null;
             this.ball.state = 'LOOSE';
             this.ball.pos.copy(hoop.rimPos).add(new THREE.Vector3(0, 0.25, 0));
@@ -231,6 +235,8 @@ export const BallMethods = {
             // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js)
             this.scorePoints(outcome.shooterTeam, pts, outcome.shooterId);
         } else {
+            this.onShotMissed(outcome);
+            this.ball.pendingShotOutcome = null;
             this.ball.state = 'LOOSE';
             this.ball.vel.set(
                 (Math.random() - 0.5) * 3.8,

@@ -11,6 +11,7 @@
  * - NetSync.js : Synchronisation réseau : état du monde de l'hôte, joueurs distants, actions reçues, départs.
  * - Screens.js : Écrans (« block ») et pick and roll, défenseurs bloqués, changements de joueur (switch).
  * - Clock.js : Chrono de tir (24 s), temps de match, fin de match et écran de résultat.
+ * - MatchSheet.js : Feuille de match (statistiques de chaque joueur, déroulé des actions).
  */
 
 import * as THREE from 'three';
@@ -29,6 +30,7 @@ import { CameraMethods } from './Camera.js';
 import { NetSyncMethods } from './NetSync.js';
 import { ScreenMethods } from './Screens.js';
 import { ClockMethods } from './Clock.js';
+import { MatchSheetMethods } from './MatchSheet.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -528,4 +530,4 @@ export class GameEngine {
     }
 }
 
-Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods, NetSyncMethods, ScreenMethods, ClockMethods);
+Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods, NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods);

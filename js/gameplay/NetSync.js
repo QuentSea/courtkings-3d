@@ -36,8 +36,7 @@ export const NetSyncMethods = {
                 pos: v(ent.pos),
                 rotY: r(ent.rotY),
                 state: ent.state,
-                dribbleHand: ent.mesh.dribbleHand,
-                pts: ent.points || 0
+                dribbleHand: ent.mesh.dribbleHand
             });
         }
         const b = this.ball;
@@ -73,7 +72,9 @@ export const NetSyncMethods = {
                 winner: this.matchRules.winner,
                 endReason: this.matchRules.endReason
             },
-            alert: { seq: this.alertSeq, text: this.lastAlertText }
+            alert: { seq: this.alertSeq, text: this.lastAlertText },
+            // Feuille de match : seulement une fois le match fini, 2 fois par seconde (paquet plus lourd)
+            sheet: this.matchRules.matchOver && (this.sheetPacket++ % 10 === 0) ? this.buildSheetPacket() : undefined
         };
     },
 
@@ -109,11 +110,8 @@ export const NetSyncMethods = {
             ent.state = p.state;
             if (p.dribbleHand) ent.mesh.dribbleHand = p.dribbleHand;
         }
-        // Points de chaque joueur (meilleur marqueur de l'écran de fin), y compris les siens
-        for (const p of packet.players || []) {
-            const ent = this.entities.get(p.id);
-            if (ent && typeof p.pts === 'number') ent.points = p.pts;
-        }
+        // Feuille de match (envoyée par l'hôte à la fin du match)
+        if (packet.sheet) this.applySheetPacket(packet.sheet);
 
         const nb = packet.ball;
         if (nb) {
@@ -182,6 +180,7 @@ export const NetSyncMethods = {
             }
         } else if (eventName === 'BLOCK') {
             const blocker = this.entities.get(payload.blockerId);
+            if (this.isAuthority) this.onBlock(payload.blockerId, this.ball.pendingShotOutcome?.shooterId || this.ball.holderId);
             this.ball.holderId = null;
             this.ball.pendingShotOutcome = null;
             this.ball.state = 'LOOSE';

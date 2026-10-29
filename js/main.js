@@ -215,6 +215,19 @@ class CourtKingsApp {
         document.getElementById('btn-match-end-replay')?.addEventListener('click', () => {
             this.network.startMatch();
         });
+        // Feuille de match : onglets et filtre « seulement mes actions »
+        document.querySelectorAll('[data-sheet-tab]').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('[data-sheet-tab]').forEach(t => t.classList.toggle('active', t === tab));
+                document.querySelectorAll('[data-sheet-panel]').forEach((panel) => {
+                    panel.classList.toggle('hidden', panel.dataset.sheetPanel !== tab.dataset.sheetTab);
+                });
+            });
+        });
+        document.getElementById('sheet-only-mine')?.addEventListener('change', (e) => {
+            this.gameEngine.sheetFilterMine = e.target.checked;
+            this.gameEngine.renderMatchSheet();
+        });
         document.getElementById('btn-match-end-lobby')?.addEventListener('click', () => {
             this.gameEngine.hideMatchEnd();
             this.switchScreen('lobby');

@@ -363,6 +363,22 @@
                 <p id="match-end-score" class="match-end-score">ÉQUIPE A 21 — 15 ÉQUIPE B</p>
                 <p id="match-end-reason" class="match-end-reason"></p>
                 <p id="match-end-mvp" class="match-end-mvp"></p>
+
+                <!-- FEUILLE DE MATCH -->
+                <div class="sheet-tabs">
+                    <button type="button" class="sheet-tab active" data-sheet-tab="stats">Statistiques</button>
+                    <button type="button" class="sheet-tab" data-sheet-tab="log">Déroulé du match</button>
+                </div>
+                <div class="sheet-panel" data-sheet-panel="stats">
+                    <div class="sheet-table-wrap"><table id="sheet-stats" class="sheet-stats"></table></div>
+                    <p class="sheet-legend">2 PTS / 3 PTS / DUNKS : réussis / tentés · REB : rebonds (offensifs / défensifs) ·
+                        PD : passes décisives · INT : interceptions · CTR : contres · ÉCR : écrans réussis · BP : balles perdues</p>
+                </div>
+                <div class="sheet-panel hidden" data-sheet-panel="log">
+                    <label class="sheet-filter"><input type="checkbox" id="sheet-only-mine"> Seulement mes actions</label>
+                    <ol id="sheet-log" class="sheet-log"></ol>
+                </div>
+
                 <div class="match-end-actions">
                     <button type="button" id="btn-match-end-replay" class="btn-primary-glow">Rejouer</button>
                     <button type="button" id="btn-match-end-lobby" class="hud-btn">Retour au salon</button>

@@ -597,6 +597,7 @@ export class GameEngine {
 
         // 9. Caméra dynamique 2K Cam / Suivi
         this.updateCamera(dt);
+        this.declutterNameplates(dt);
 
         // 10. Synchronisation Réseau Temps Réel (20 Hz) :
         // l'hôte envoie tout l'état du monde, un invité envoie seulement son joueur

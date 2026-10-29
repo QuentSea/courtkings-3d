@@ -110,6 +110,7 @@ export class CharacterBuilder {
         // Personnage 3D
         this.characterMesh = createCharacterMesh(this.profile);
         this.scene.add(this.characterMesh.root);
+        this.hideNameplate();
 
         // Ballon 3D décoratif pour l'aperçu Dribble / Tir
         const ballGeo = new THREE.SphereGeometry(0.14, 24, 24);
@@ -454,6 +455,13 @@ export class CharacterBuilder {
     update3DPreview() {
         if (!this.characterMesh) return;
         this.characterMesh.updateConfig(this.profile);
+        this.hideNameplate();
+    }
+
+    // Pas d'étiquette au-dessus de la tête ici : elle passait sous la carte « Note globale » (le nom est dans le champ,
+    // la note dans la carte). Refaite à chaque reconstruction du modèle, d'où l'appel après updateConfig
+    hideNameplate() {
+        if (this.characterMesh.nameSprite) this.characterMesh.nameSprite.visible = false;
     }
 
     saveProfile() {

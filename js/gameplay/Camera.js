@@ -44,5 +44,46 @@ export const CameraMethods = {
         // Caméra tournée vers le sud (+Z) : les touches et le stick s'inversent pour rester « haut = haut de l'écran »
         this.camera.getWorldDirection(this.cameraForward);
         this.viewFlipped = this.cameraForward.z > 0;
+    },
+
+    /**
+     * Étiquettes des joueurs (poste, note, nom) : quand deux se chevauchent à l'écran, celle du joueur le plus loin
+     * s'efface. La mienne puis celle du porteur du ballon passent avant les autres.
+     */
+    declutterNameplates(dt) {
+        const cam = this.camera;
+        cam.updateMatrixWorld();
+        const right = _right.setFromMatrixColumn(cam.matrixWorld, 0);
+        const up = _up.setFromMatrixColumn(cam.matrixWorld, 1);
+        const plates = [];
+        for (const ent of this.entities.values()) {
+            const s = ent.mesh.nameSprite;
+            if (!s) continue;
+            _p.copy(ent.mesh.root.position);
+            _p.y += s.position.y;
+            const dist = _p.distanceTo(cam.position);
+            const c = _c.copy(_p).project(cam);
+            // Pilule dessinée sur ~86 % de la largeur et ~64 % de la hauteur du sprite (createNameplateSprite)
+            const w = Math.abs(_q.copy(_p).addScaledVector(right, s.scale.x * 0.43).project(cam).x - c.x);
+            const h = Math.abs(_q.copy(_p).addScaledVector(up, s.scale.y * 0.32).project(cam).y - c.y);
+            const rank = ent.id === this.localPlayerId ? 0 : ent.id === this.ball.holderId ? 1 : 2;
+            plates.push({ s, x: c.x, y: c.y, w, h, rank, dist });
+        }
+        plates.sort((a, b) => a.rank - b.rank || a.dist - b.dist);
+        const shown = [];
+        for (const pl of plates) {
+            // Marge pour une étiquette déjà effacée : elle ne clignote pas quand deux joueurs se frôlent
+            const m = pl.s.material.opacity < 0.5 ? 1.15 : 1;
+            const hidden = shown.some(o => Math.abs(pl.x - o.x) < (pl.w + o.w) * m && Math.abs(pl.y - o.y) < (pl.h + o.h) * m);
+            if (!hidden) shown.push(pl);
+            const target = hidden ? 0 : 1;
+            pl.s.material.opacity += (target - pl.s.material.opacity) * Math.min(1, dt * 12);
+        }
     }
 };
+
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _p = new THREE.Vector3();
+const _c = new THREE.Vector3();
+const _q = new THREE.Vector3();

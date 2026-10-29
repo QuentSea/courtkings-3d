@@ -33,13 +33,13 @@
 
         <nav class="main-nav-tabs">
             <button type="button" class="nav-tab active" data-nav-screen="builder">
-                1. CRÉATEUR DE JOUEUR (MYPLAYER)
+                1. CRÉATEUR DE JOUEUR <span class="nav-extra">(MYPLAYER)</span>
             </button>
             <button type="button" class="nav-tab" data-nav-screen="lobby">
-                2. SALON MULTIJOUEUR (CODE AMIS)
+                2. SALON MULTIJOUEUR <span class="nav-extra">(CODE AMIS)</span>
             </button>
             <button type="button" class="nav-tab" data-nav-screen="match">
-                3. TERRAIN 3D (3v3 / 4v4 / 5v5)
+                3. TERRAIN 3D <span class="nav-extra">(3v3 / 4v4 / 5v5)</span>
             </button>
         </nav>
 
@@ -366,20 +366,20 @@
                 <button type="button" id="btn-hud-builder" class="hud-btn">Mon Joueur</button>
                 <button type="button" id="btn-hud-lobby" class="hud-btn">Salon</button>
             </div>
+
+            <!-- TACTIQUES EN COURS ET FAUTES D'ÉQUIPE (sous le score et la barre d'outils, qui peut prendre plusieurs lignes) -->
+            <div id="hud-tactics" class="hud-tactics"></div>
+
+            <!-- BANNIÈRE D'ALERTE RÈGLES / GREEN RELEASE -->
+            <div id="court-rule-toast" class="court-rule-toast hidden">CHECK BALL !</div>
+
+            <!-- PAUSE / MENU (Échap) : sous la barre d'outils, qui peut prendre plusieurs lignes en petite fenêtre -->
+            <div id="pause-overlay" class="pause-overlay hidden" role="dialog" aria-labelledby="pause-title">
+                <div id="pause-title" class="pause-title">⏸ PAUSE</div>
+                <p id="pause-text" class="pause-text"></p>
+                <button type="button" id="btn-pause-resume" class="btn-primary-glow">Reprendre</button>
+            </div>
         </div>
-
-        <!-- PAUSE / MENU (Échap) -->
-        <div id="pause-overlay" class="pause-overlay hidden" role="dialog" aria-labelledby="pause-title">
-            <div id="pause-title" class="pause-title">⏸ PAUSE</div>
-            <p id="pause-text" class="pause-text"></p>
-            <button type="button" id="btn-pause-resume" class="btn-primary-glow">Reprendre</button>
-        </div>
-
-        <!-- TACTIQUES EN COURS ET FAUTES D'ÉQUIPE -->
-        <div id="hud-tactics" class="hud-tactics"></div>
-
-        <!-- BANNIÈRE D'ALERTE RÈGLES / GREEN RELEASE -->
-        <div id="court-rule-toast" class="court-rule-toast hidden">CHECK BALL !</div>
 
         <!-- ÉCRAN DE FIN DE MATCH -->
         <div id="match-end-overlay" class="match-end-overlay hidden">

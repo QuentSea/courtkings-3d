@@ -780,7 +780,7 @@ body {
 .lobby-main-grid {
     flex: 1;
     display: grid;
-    grid-template-columns: 330px 1fr 330px;
+    grid-template-columns: 330px minmax(0, 1fr) 330px;
     gap: 16px;
     min-height: 0;
 }
@@ -865,10 +865,18 @@ body {
 
 .lobby-3d-canvas {
     flex: 1;
+    position: relative;
+    min-height: 0;
     border-radius: 12px;
     border: 1px solid var(--border-subtle);
     overflow: hidden;
     background: #090d16;
+}
+
+/* Comme l'aperçu du créateur : le canvas ne garde pas la zone à son ancienne taille (colonne Équipe B poussée hors écran) */
+.lobby-3d-canvas canvas {
+    position: absolute;
+    inset: 0;
 }
 
 .btn-launch-match {
@@ -897,9 +905,12 @@ body {
     top: 14px;
     left: 20px;
     right: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    /* Score à gauche, barre d'outils (pause) à droite, qui passe à la ligne au lieu d'écraser le score ;
+       tactiques et bannière d'alerte en dessous, centrées : rien ne se chevauche quelle que soit la largeur */
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 8px 12px;
     pointer-events: none;
     z-index: 20;
 }
@@ -966,6 +977,8 @@ body {
 .match-quick-toolbar {
     pointer-events: auto;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     align-items: center;
     gap: 6px;
 }
@@ -1118,11 +1131,10 @@ body {
 .fb-main { font-size: 1.05rem; font-weight: 700; }
 .fb-sub  { font-size: 0.78rem; color: #e2e8f0; }
 
+/* Dans la grille du haut (.match-hud-top), sous les tactiques */
 .court-rule-toast {
-    position: absolute;
-    top: 185px;
-    left: 50%;
-    transform: translateX(-50%);
+    grid-column: 1 / -1;
+    justify-self: center;
     background: rgba(15, 23, 42, 0.92);
     border: 1px solid var(--accent-blue);
     color: #fff;
@@ -1399,12 +1411,9 @@ kbd {
 
 /* Tactiques en cours et fautes d'équipe (Tactics.js), sous le tableau de score */
 .hud-tactics {
-    position: absolute;
-    top: 150px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 20;
-    max-width: calc(100% - 32px);
+    grid-column: 1 / -1;
+    justify-self: center;
+    max-width: 100%;
     padding: 4px 14px;
     border-radius: 99px;
     background: rgba(15, 23, 42, 0.72);
@@ -1510,13 +1519,24 @@ body.in-match:not(.menu-open) .match-quick-toolbar,
 body.in-match:not(.menu-open) .controls-Overlay-bar { display: none; }
 body.in-match.menu-open .match-hud-top { top: 64px; }
 
+/* Fenêtre étroite : menu du haut plus court (il dépassait sur la barre d'outils), barre d'outils sous le score */
+@media (max-width: 1100px) {
+    .nav-extra,
+    .version-pill { display: none; }
+    .nav-tab {
+        padding: 6px 10px;
+        font-size: 0.76rem;
+    }
+    .match-quick-toolbar { grid-column: 1 / -1; }
+}
+
+/* Dans la grille du haut (.match-hud-top), sous les tactiques : ne recouvre ni la barre d'outils ni les tactiques */
 .pause-overlay {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 35;
-    width: min(420px, calc(100% - 32px));
+    grid-column: 1 / -1;
+    justify-self: center;
+    margin-top: 6vh;
+    pointer-events: auto;
+    width: min(420px, 100%);
     padding: 22px 20px;
     text-align: center;
     background: rgba(15, 23, 42, 0.95);

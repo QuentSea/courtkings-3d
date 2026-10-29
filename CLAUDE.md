@@ -319,6 +319,17 @@
   local ne reçoit plus ses commandes. Menu fermé au début d'un match et en quittant l'écran du match ; Échap dans la
   fenêtre « Touches » ne ferme que la fenêtre. Testé : barre cachée, pause (chrono arrêté), reprise, P, Échap dans
   « Touches », partie à plusieurs simulée (chrono qui tourne, joueur immobile).
+- **Textes qui se chevauchent** (29 octobre 2026, corrigé) :
+  - `.match-hud-top` est une grille : score à gauche, barre d'outils à droite (elle passe à la ligne, et sous le
+    score sous 1100 px), puis `#hud-tactics`, `#court-rule-toast` et `#pause-overlay` centrés en dessous (ils étaient
+    à des hauteurs fixes et passaient sous la barre d'outils en petite fenêtre) ;
+  - sous 1100 px : menu du haut sans les parenthèses (`.nav-extra`) ni la pastille WEBGL ;
+  - étiquettes 3D des joueurs : `declutterNameplates` (Camera.js) efface celle du joueur le plus loin quand deux se
+    chevauchent à l'écran (la mienne puis celle du porteur passent avant) ;
+  - créateur : pas d'étiquette au-dessus de la tête (`hideNameplate`), elle passait sous la carte « Note globale » ;
+  - salon : le canvas 3D ne garde plus la colonne du milieu à son ancienne taille (Équipe B hors écran).
+  - Vérifié à 780, 1024, 1366 et 1920 px (créateur, salon, match, pause, alerte, fenêtre « Touches »), avec un
+    script qui compare les rectangles des textes et des boutons.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

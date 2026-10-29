@@ -36,7 +36,8 @@ export const NetSyncMethods = {
                 pos: v(ent.pos),
                 rotY: r(ent.rotY),
                 state: ent.state,
-                dribbleHand: ent.mesh.dribbleHand
+                dribbleHand: ent.mesh.dribbleHand,
+                pts: ent.points || 0
             });
         }
         const b = this.ball;
@@ -61,7 +62,16 @@ export const NetSyncMethods = {
                 possessionTeam: this.matchRules.possessionTeam,
                 needsTakeBack: this.matchRules.needsTakeBack,
                 checkBallSeq: this.matchRules.checkBallSeq,
-                sidesSwapped: this.matchRules.sidesSwapped
+                sidesSwapped: this.matchRules.sidesSwapped,
+                // Chronos et fin de match (Clock.js)
+                gameClock: Math.round(this.matchRules.gameClock * 10) / 10,
+                shotClock: Math.round(this.matchRules.shotClock * 10) / 10,
+                shotClockStopped: this.matchRules.shotClockStopped,
+                deadBall: this.matchRules.deadBall,
+                goldenPoint: this.matchRules.goldenPoint,
+                matchOver: this.matchRules.matchOver,
+                winner: this.matchRules.winner,
+                endReason: this.matchRules.endReason
             },
             alert: { seq: this.alertSeq, text: this.lastAlertText }
         };
@@ -99,6 +109,11 @@ export const NetSyncMethods = {
             ent.state = p.state;
             if (p.dribbleHand) ent.mesh.dribbleHand = p.dribbleHand;
         }
+        // Points de chaque joueur (meilleur marqueur de l'écran de fin), y compris les siens
+        for (const p of packet.players || []) {
+            const ent = this.entities.get(p.id);
+            if (ent && typeof p.pts === 'number') ent.points = p.pts;
+        }
 
         const nb = packet.ball;
         if (nb) {
@@ -127,6 +142,21 @@ export const NetSyncMethods = {
             this.matchRules.possessionTeam = rules.possessionTeam;
             this.matchRules.needsTakeBack = rules.needsTakeBack;
             if (changed) this.updateScoreboardUI();
+
+            const r = this.matchRules;
+            if (typeof rules.gameClock === 'number') r.gameClock = rules.gameClock;
+            if (typeof rules.shotClock === 'number') r.shotClock = rules.shotClock;
+            r.shotClockStopped = !!rules.shotClockStopped;
+            r.deadBall = !!rules.deadBall;
+            r.goldenPoint = !!rules.goldenPoint;
+            const ended = !!rules.matchOver && !r.matchOver;
+            r.matchOver = !!rules.matchOver;
+            r.winner = rules.winner;
+            r.endReason = rules.endReason || '';
+            if (ended) {
+                if (this.shotMeter?.active) this.shotMeter.cancel();
+                this.showMatchEnd();
+            }
         }
 
         if (packet.alert && packet.alert.seq !== this.alertSeq) {

@@ -259,7 +259,7 @@ export const ActionsMethods = {
         // Un contre est décidé par l'écran du joueur qui saute (l'hôte pour les bots),
         // un rebond toujours par l'hôte
         const canBlock = player.isLocal || (player.isBot && this.isAuthority);
-        const canRebound = this.isAuthority;
+        const canRebound = this.isAuthority && !this.matchRules.deadBall; // balle morte : pas de rebond (Clock.js)
 
         // 1. CONTRE D'UN TIR EN VOL (SWAT BLOCK !)
         if (canBlock && this.ball.state === 'SHOT' && this.ball.pendingShotOutcome) {

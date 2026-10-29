@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { SHOT_CLOCK } from './Clock.js';
 
 export const RulesMethods = {
     getAttackingHoopForTeam(team) {
@@ -33,7 +34,9 @@ export const RulesMethods = {
     resetPositionsForCheckBall(offenseTeam = 'A') {
         this.matchRules.possessionTeam = offenseTeam;
         this.matchRules.needsTakeBack = false;
-        this.matchRules.shotClock = 24;
+        this.matchRules.shotClock = SHOT_CLOCK;
+        this.matchRules.shotClockStopped = false;
+        this.matchRules.deadBall = false; // la balle redevient vivante
         if (this.isAuthority) this.matchRules.checkBallSeq++;
 
         const isHalf = this.currentMode.isHalfCourt;
@@ -109,6 +112,7 @@ export const RulesMethods = {
         this.ball.holderId = playerId;
         this.ball.state = 'HELD';
         this.matchRules.possessionTeam = player.team;
+        this.onPossessionGained(prevTeam, player.team); // chrono de tir : 24 s ou 14 s (Clock.js)
 
         if (this.currentMode.isHalfCourt && isDefensiveChange && prevTeam !== player.team) {
             const hoop = this.getAttackingHoopForTeam(player.team);

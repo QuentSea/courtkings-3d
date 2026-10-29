@@ -10,6 +10,7 @@
  * - Camera.js : Caméra « 2K Cam » / « Vue Suivi » : suit l'action et indique si l'écran est retourné.
  * - NetSync.js : Synchronisation réseau : état du monde de l'hôte, joueurs distants, actions reçues, départs.
  * - Screens.js : Écrans (« block ») et pick and roll, défenseurs bloqués, changements de joueur (switch).
+ * - Clock.js : Chrono de tir (24 s), temps de match, fin de match et écran de résultat.
  */
 
 import * as THREE from 'three';
@@ -27,6 +28,7 @@ import { BotAIMethods } from './BotAI.js';
 import { CameraMethods } from './Camera.js';
 import { NetSyncMethods } from './NetSync.js';
 import { ScreenMethods } from './Screens.js';
+import { ClockMethods } from './Clock.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -80,7 +82,15 @@ export class GameEngine {
             needsTakeBack: false,
             isCheckBall: false,
             checkBallSeq: 0, // incrémenté à chaque remise en jeu : l'invité se replace quand il change
-            sidesSwapped: false // tout-terrain : vrai après la mi-temps (A attaque au sud, B au nord)
+            sidesSwapped: false, // tout-terrain : vrai après la mi-temps (A attaque au sud, B au nord)
+            // Chronos et fin de match (Clock.js)
+            gameClock: 600,
+            shotClockStopped: false, // tir en l'air ou rebond : le chrono de tir attend le prochain porteur
+            deadBall: false,         // panier, 24 s, mi-temps : personne ne joue jusqu'à la remise en jeu
+            matchOver: false,
+            winner: null,
+            endReason: '',
+            goldenPoint: false       // égalité à la fin du temps : le prochain panier gagne
         };
         this.pendingHalftimeAlert = false;
 
@@ -248,6 +258,7 @@ export class GameEngine {
             }
         }
 
+        this.resetMatchClock();
         this.resetPositionsForCheckBall('A');
         this.updateScoreboardUI();
         this.quality.resetMeasure(); // ne pas juger la fluidité pendant la préparation du match
@@ -364,7 +375,10 @@ export class GameEngine {
         if (this.crossoverCooldown > 0) this.crossoverCooldown -= dt;
         if (this.stealCooldown > 0) this.stealCooldown -= dt;
 
-        // 0. Écrans posés, défenseurs bloqués, pick and roll lancé par l'hôte
+        // 0. Chronos (hôte) et leur affichage ; écrans posés, défenseurs bloqués, pick and roll lancé par l'hôte
+        this.updateMatchClock(dt);
+        this.updateClockUI();
+        const matchOver = this.matchRules.matchOver;
         this.updateScreens(dt);
 
         // 0 bis. Lire l'état de la Manette (si connectée)
@@ -372,7 +386,7 @@ export class GameEngine {
 
         // 1. Mise à jour du joueur local (Clavier + Manette)
         const me = this.getLocalEntity();
-        if (me) {
+        if (me && !matchOver) {
             this.updateLocalPlayerControl(me, dt, padInput);
         }
 
@@ -390,7 +404,7 @@ export class GameEngine {
         // 4. Mise à jour des Bots IA (Marquage Individuel 1v1 + Spacing Offensif) : chez l'hôte seulement
         const isAuthority = this.isAuthority;
         for (const ent of this.entities.values()) {
-            if (ent.isBot && isAuthority) {
+            if (ent.isBot && isAuthority && !matchOver) {
                 this.updateBotAI(ent, dt);
             }
         }
@@ -514,4 +528,4 @@ export class GameEngine {
     }
 }
 
-Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods, NetSyncMethods, ScreenMethods);
+Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods, NetSyncMethods, ScreenMethods, ClockMethods);

@@ -182,6 +182,26 @@
        - Testé : écran à la main, pick and roll demandé (défenseur bloqué, 2 m d'avance), 2 min de bots seuls
          (5 pick and roll, 4 roll, 1 pop), hôte + invité (écran de l'invité vu et efficace chez l'hôte, appel
          d'écran de l'invité → bot envoyé), aucune erreur.
+     - ✅ **Chrono des 24 s et fin de match** — `js/gameplay/Clock.js` (29 octobre 2026) :
+       - Chrono de tir (`matchRules.shotClock`, hôte) : 24 s à chaque changement d'équipe (`onPossessionGained`,
+         appelé par `giveBallTo`), au moins 14 s après un rebond offensif, arrêté pendant un tir
+         (`shotClockStopped`, posé par `launchShotBall` et le dunk raté). À 0 : `shotClockViolation` → balle à l'autre
+         équipe. Bots porteurs : tirent tout de suite sous 3,5 s (`isShotClockHurry`), sans passe ni pick and roll.
+       - Temps de match (`gameDuration` de `GAME_MODES` : 420 / 480 / 720 s) : ne tourne que balle vivante.
+         5v5 : mi-temps à 6 min (ou au score, `checkHalftime`), B remet en jeu. Un tir parti avant la sirène compte.
+       - Balle morte (`deadBall`, après panier / 24 s / mi-temps / fin) : pas de ramassage ni de rebond, chronos
+         arrêtés ; remise en jeu par `scheduleCheckBall` (annulée si nouveau match : `matchToken`).
+       - `scorePoints` (commun au tir et au dunk) : score, points du marqueur (`ent.points`), `checkMatchEnd`.
+         Fin : score cible (21 / 30), temps écoulé avec un écart, sinon panier en or (`goldenPoint`, le prochain
+         panier gagne). `endMatch` → `matchOver` : commandes et bots figés, écran `#match-end-overlay`
+         (victoire/défaite, score, raison, meilleur marqueur ; Rejouer = hôte seul → `network.startMatch()`).
+       - Affichage : HUD `#hud-game-clock` / `#hud-shot-clock` (rouge sous 5 s, dixièmes), écran géant (temps en bas),
+         boîtier au-dessus de chaque planche (`CourtScene.updateShotClock`). Mis à jour seulement si le texte change.
+       - Réseau : chronos, `deadBall`, `goldenPoint`, `matchOver`, `winner`, `endReason` dans `rules` du WORLD_STATE,
+         points des joueurs (`pts`) ; l'invité affiche l'écran de fin (sans Rejouer).
+       - Testé : 24 s (balle à B), 14 s après rebond offensif, match de bots jusqu'à 22-15 (fin au score, 2 min 44),
+         Rejouer, temps écoulé à 9-7 et à 10-10 (panier en or → B gagne), mi-temps 5v5 à 6:00, hôte + invité (mêmes
+         chronos, écran « DÉFAITE » chez l'invité, Rejouer de l'hôte relance les deux), aucune erreur.
      - À faire : alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers
        francs, chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête

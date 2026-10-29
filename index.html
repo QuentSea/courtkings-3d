@@ -325,6 +325,10 @@
                 </div>
                 <div class="score-center">
                     <span id="hud-mode-badge" class="hud-mode-pill">3v3</span>
+                    <div class="hud-clocks">
+                        <span id="hud-game-clock" class="hud-game-clock" title="Temps de match">7:00</span>
+                        <span id="hud-shot-clock" class="hud-shot-clock" title="Chrono de tir (24 s)">24</span>
+                    </div>
                     <span id="hud-rule-status" class="hud-possession">POSSESSION : ÉQUIPE A</span>
                 </div>
                 <div class="team-score team-b">
@@ -351,6 +355,21 @@
 
         <!-- BANNIÈRE D'ALERTE RÈGLES / GREEN RELEASE -->
         <div id="court-rule-toast" class="court-rule-toast hidden">CHECK BALL !</div>
+
+        <!-- ÉCRAN DE FIN DE MATCH -->
+        <div id="match-end-overlay" class="match-end-overlay hidden">
+            <div class="match-end-card">
+                <h2 id="match-end-title" class="match-end-title">🏆 VICTOIRE !</h2>
+                <p id="match-end-score" class="match-end-score">ÉQUIPE A 21 — 15 ÉQUIPE B</p>
+                <p id="match-end-reason" class="match-end-reason"></p>
+                <p id="match-end-mvp" class="match-end-mvp"></p>
+                <div class="match-end-actions">
+                    <button type="button" id="btn-match-end-replay" class="btn-primary-glow">Rejouer</button>
+                    <button type="button" id="btn-match-end-lobby" class="hud-btn">Retour au salon</button>
+                </div>
+                <p id="match-end-wait" class="match-end-wait hidden">L'hôte peut relancer une partie.</p>
+            </div>
+        </div>
         <div id="shot-feedback-banner" class="shot-feedback-banner hidden"></div>
 
         <!-- JAUGE DE TIR 3D/UI (SHOT METER AVEC GREEN WINDOW) -->

@@ -42,6 +42,8 @@ export const BallMethods = {
         const dist = this.getHorizontalDist(shooter.pos, hoop.rimPos);
         this.ball.flightDuration = Math.max(0.55, Math.min(1.25, 0.52 + dist * 0.08));
         this.ball.flightArcHeight = Math.max(1.2, dist * 0.34);
+        // Chrono de tir arrêté jusqu'au prochain porteur (24 s s'il change d'équipe, 14 s mini sinon)
+        this.matchRules.shotClockStopped = true;
         this.ball.pendingShotOutcome = {
             ...outcome,
             shooterId: shooter.id,
@@ -145,7 +147,8 @@ export const BallMethods = {
             this.clampToCourtBounds(this.ball.pos);
 
             for (const ent of this.entities.values()) {
-                if (!this.isAuthority) break;
+                // Balle morte (panier, 24 s, fin) : personne ne la ramasse avant la remise en jeu
+                if (!this.isAuthority || this.matchRules.deadBall) break;
                 if (this.getHorizontalDist(ent.pos, this.ball.pos) < 0.85 && this.ball.pos.y < 1.8) {
                     const isDefChange = this.matchRules.possessionTeam !== ent.team;
                     this.giveBallTo(ent.id, isDefChange);
@@ -186,27 +189,17 @@ export const BallMethods = {
             this.ball.pos.copy(hoop.rimPos).add(new THREE.Vector3(0, -0.15, 0));
             this.ball.vel.set((Math.random() - 0.5) * 1.2, -7.5, (Math.random() - 0.5) * 1.2);
 
-            if (dunker.team === 'A') {
-                this.matchRules.scoreA += 2;
-            } else {
-                this.matchRules.scoreB += 2;
-            }
-
             const isPoster = contest > 0.35;
             const title = isPoster ? '💥 POSTER DUNK MONSTRUEUX (+2 PTS) !' : '💥 SLAM DUNK (+2 PTS) !';
             this.showRuleAlert(`${title} (${dunker.profile.playerName})`);
             if (this.shotMeter && dunker.isLocal) {
                 this.shotMeter.showFeedback(isPoster ? 'POSTER DUNK !' : 'SLAM DUNK !', Math.round(contest * 100), 'feedback-green', true);
             }
-            this.updateScoreboardUI();
-            this.checkHalftime();
-
-            const nextTeam = dunker.team === 'A' ? 'B' : 'A';
-            setTimeout(() => {
-                this.resetPositionsForCheckBall(nextTeam);
-            }, 1200);
+            // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js)
+            this.scorePoints(dunker.team, 2, dunker.id);
         } else {
-            // Dunk raté sur l'arceau (Rim Out)
+            // Dunk raté sur l'arceau (Rim Out) : rebond, le chrono de tir repart à 14 s si l'attaque le reprend
+            this.matchRules.shotClockStopped = true;
             this.ball.holderId = null;
             this.ball.state = 'LOOSE';
             this.ball.pos.copy(hoop.rimPos).add(new THREE.Vector3(0, 0.25, 0));
@@ -231,23 +224,12 @@ export const BallMethods = {
             this.ball.vel.set(0, -3.5, 0);
 
             const pts = outcome.isThreePointer ? 3 : 2;
-            if (outcome.shooterTeam === 'A') {
-                this.matchRules.scoreA += pts;
-            } else {
-                this.matchRules.scoreB += pts;
-            }
-
             const label = outcome.isThreePointer
                 ? '🔥 PANIER À 3 POINTS (HORS CERCLE : +3 PTS) !'
                 : '🏀 PANIER À 2 POINTS (DANS LE CERCLE : +2 PTS) !';
             this.showRuleAlert(`${label} (${outcome.shooterName})`);
-            this.updateScoreboardUI();
-            this.checkHalftime();
-
-            const nextTeam = outcome.shooterTeam === 'A' ? 'B' : 'A';
-            setTimeout(() => {
-                this.resetPositionsForCheckBall(nextTeam);
-            }, 1200);
+            // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js)
+            this.scorePoints(outcome.shooterTeam, pts, outcome.shooterId);
         } else {
             this.ball.state = 'LOOSE';
             this.ball.vel.set(

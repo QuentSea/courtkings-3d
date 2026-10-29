@@ -31,7 +31,7 @@ export const ControlsMethods = {
 
     bindControls() {
         window.addEventListener('keydown', (e) => {
-            if (!this.isRunning) return;
+            if (!this.isRunning || this.matchRules.matchOver) return;
             const code = e.code;
             this.keys[code] = true;
 
@@ -194,7 +194,7 @@ export const ControlsMethods = {
         const justReleased = (idx) => !isPressed(idx) && wasPressed(idx);
 
         const me = this.getLocalEntity();
-        if (me) {
+        if (me && !this.matchRules.matchOver) {
             // Bouton A / Croix (0) : Passe directionnelle ou Demander la passe
             if (justPressed(0)) {
                 this.handleActionPassOrCall(me);

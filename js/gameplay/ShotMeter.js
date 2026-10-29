@@ -58,6 +58,12 @@ export class ShotMeter {
         this.updateVisuals();
     }
 
+    /** Arrêt sans tir (balle morte : 24 secondes, fin de match) */
+    cancel() {
+        this.active = false;
+        if (this.meterEl) this.meterEl.classList.add('hidden');
+    }
+
     update(dt) {
         if (!this.active) return null;
 

@@ -211,6 +211,15 @@ class CourtKingsApp {
             });
         }
 
+        // Écran de fin de match : l'hôte relance pour tout le salon ; tout le monde peut revenir au salon
+        document.getElementById('btn-match-end-replay')?.addEventListener('click', () => {
+            this.network.startMatch();
+        });
+        document.getElementById('btn-match-end-lobby')?.addEventListener('click', () => {
+            this.gameEngine.hideMatchEnd();
+            this.switchScreen('lobby');
+        });
+
         // Qualité graphique (Auto / Haute / Moyenne / Basse) pour les PC moins puissants
         const qualitySelect = document.getElementById('hud-quality');
         if (qualitySelect) {
@@ -286,7 +295,9 @@ class CourtKingsApp {
         const modeInfo = GAME_MODES[lobbyState.mode] || GAME_MODES['3v3'];
         const modeDescEl = document.getElementById('lobby-mode-description');
         if (modeDescEl) {
-            modeDescEl.textContent = `${modeInfo.name} — ${modeInfo.description}`;
+            const minutes = Math.round((modeInfo.gameDuration || 600) / 60);
+            modeDescEl.textContent = `${modeInfo.name} — ${modeInfo.description} Victoire : premier à ` +
+                `${modeInfo.targetScore} pts ou meilleur score après ${minutes} min (égalité : panier en or).`;
         }
 
         // Afficher les joueurs dans les colonnes Équipe A et Équipe B

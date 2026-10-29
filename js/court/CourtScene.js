@@ -318,6 +318,21 @@ export class CourtScene {
         backboard.castShadow = true;
         hoopGroup.add(backboard);
 
+        // Chrono des 24 s posé sur la planche (lisible des deux côtés)
+        const clockBox = new THREE.Mesh(
+            new THREE.BoxGeometry(0.62, 0.36, 0.14),
+            new THREE.MeshStandardMaterial({ color: '#0b1120', metalness: 0.4, roughness: 0.5 })
+        );
+        clockBox.position.set(x, 3.38 + 0.525 + 0.2, backboardZ);
+        const clockMat = new THREE.MeshBasicMaterial({ map: this.getShotClockTexture(), toneMapped: false });
+        for (const side of [1, -1]) {
+            const face = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.3), clockMat);
+            face.position.z = side * 0.071;
+            if (side < 0) face.rotation.y = Math.PI;
+            clockBox.add(face);
+        }
+        hoopGroup.add(clockBox);
+
         // Cadre blanc + carré de visée sur la planche
         const frameEdges = new THREE.EdgesGeometry(boardGeo);
         const frameLines = new THREE.LineSegments(
@@ -550,9 +565,35 @@ export class CourtScene {
         this.updateScoreboard(this.lastScoreA || 0, this.lastScoreB || 0);
     }
 
-    updateScoreboard(scoreA, scoreB) {
+    /** Texture partagée par les chronos de tir des deux paniers (créée une fois) */
+    getShotClockTexture() {
+        if (!this.shotClockCanvas) {
+            this.shotClockCanvas = document.createElement('canvas');
+            this.shotClockCanvas.width = 128;
+            this.shotClockCanvas.height = 64;
+            this.shotClockTexture = asColorTexture(new THREE.CanvasTexture(this.shotClockCanvas));
+            this.updateShotClock(24);
+        }
+        return this.shotClockTexture;
+    }
+
+    updateShotClock(seconds) {
+        if (!this.shotClockCanvas) return;
+        const ctx = this.shotClockCanvas.getContext('2d');
+        ctx.fillStyle = '#020617';
+        ctx.fillRect(0, 0, 128, 64);
+        ctx.font = '900 54px "Chakra Petch", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = seconds <= 5 ? '#ef4444' : '#f59e0b';
+        ctx.fillText(String(seconds), 64, 35);
+        this.shotClockTexture.needsUpdate = true;
+    }
+
+    updateScoreboard(scoreA, scoreB, clockText = this.lastClockText || '') {
         this.lastScoreA = scoreA;
         this.lastScoreB = scoreB;
+        this.lastClockText = clockText;
         if (!this.scoreCanvas) return;
         const ctx = this.scoreCanvas.getContext('2d');
         ctx.fillStyle = '#020617';
@@ -570,14 +611,21 @@ export class CourtScene {
         ctx.fillText('ÉQUIPE A', 128, 30);
         ctx.fillText('ÉQUIPE B', 384, 30);
 
-        ctx.font = '900 130px "Chakra Petch", sans-serif';
+        ctx.font = '900 112px "Chakra Petch", sans-serif';
         ctx.fillStyle = '#38bdf8';
-        ctx.fillText(String(scoreA), 128, 160);
+        ctx.fillText(String(scoreA), 128, 135);
         ctx.fillStyle = '#fb7185';
-        ctx.fillText(String(scoreB), 384, 160);
+        ctx.fillText(String(scoreB), 384, 135);
 
         ctx.fillStyle = '#f97316';
-        ctx.fillRect(254, 80, 4, 150);
+        ctx.fillRect(254, 72, 4, 130);
+
+        // Temps de match en bas (ou « PANIER EN OR »)
+        if (clockText) {
+            ctx.font = '900 40px "Chakra Petch", sans-serif';
+            ctx.fillStyle = '#facc15';
+            ctx.fillText(clockText, 256, 230);
+        }
         this.scoreTexture.needsUpdate = true;
     }
 

@@ -42,8 +42,11 @@ export const BotAIMethods = {
             const contest = this.calculateContestFactor(bot);
             bot.aiThinkTimer -= dt;
 
+            // Fin du chrono de tir : tirer tout de suite, d'où qu'il soit (Clock.js)
+            const hurry = this.isShotClockHurry();
+
             // Pick and roll en cours : attendre l'écran, le frôler, servir celui qui roule (Screens.js)
-            if (this.pickAndRollHandlerMove(bot, dt, botSpeed, hoop)) return;
+            if (!hurry && this.pickAndRollHandlerMove(bot, dt, botSpeed, hoop)) return;
 
             // Si un Bot allié vient de recevoir votre passe en pleine coupe sous le panier (ou totalement ouvert), il tire tout de suite !
             if (isTeammateOfHuman && (distToHoop < 2.6 || (distToHoop >= 5.55 && contest < 0.22))) {
@@ -66,14 +69,14 @@ export const BotAIMethods = {
             const humanTeammate = Array.from(this.entities.values()).find(
                 e => !e.isBot && e.team === bot.team
             );
-            if (humanTeammate && bot.aiThinkTimer <= 0 && Math.random() < 0.72) {
+            if (humanTeammate && !hurry && bot.aiThinkTimer <= 0 && Math.random() < 0.72) {
                 this.launchPass(bot, humanTeammate);
                 bot.aiThinkTimer = 1.2;
                 return;
             }
 
             // Circulation de balle des Bots adverses
-            if (!isTeammateOfHuman && bot.aiThinkTimer <= 0 && Math.random() < 0.35) {
+            if (!isTeammateOfHuman && !hurry && bot.aiThinkTimer <= 0 && Math.random() < 0.35) {
                 const botMates = Array.from(this.entities.values()).filter(
                     e => e.team === bot.team && e.id !== bot.id
                 );
@@ -86,10 +89,10 @@ export const BotAIMethods = {
             }
 
             const idealRange = (bot.profile.attributes?.shooting || 75) >= 84 ? 5.75 : 2.1;
-            if (distToHoop > idealRange) {
+            if (distToHoop > idealRange && !hurry) {
                 this.moveEntityTowards(bot, hoop.rimPos, botSpeed, dt);
                 bot.state = 'DRIBBLE';
-            } else if (bot.aiThinkTimer <= 0) {
+            } else if (bot.aiThinkTimer <= 0 || hurry) {
                 const isThree = distToHoop >= 5.55;
                 const shootStat = isThree ? bot.profile.attributes.shooting : bot.profile.attributes.finishing;
                 // Taux de réussite des tirs adverses calibré à 50% - 60% (modulé par votre contestation)

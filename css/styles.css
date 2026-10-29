@@ -1130,6 +1130,102 @@ body {
     display: none !important;
 }
 
+/* CHRONOS DU MATCH (temps de match + chrono de tir 24 s) */
+.hud-clocks {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0;
+}
+
+.hud-game-clock {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--accent-gold);
+    letter-spacing: 1px;
+}
+
+.hud-shot-clock {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 0.95rem;
+    min-width: 2.6em;
+    text-align: center;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #020617;
+    border: 1px solid #f59e0b;
+    color: #f59e0b;
+}
+
+.hud-shot-clock.low {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+/* ÉCRAN DE FIN DE MATCH */
+.match-end-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(2, 6, 23, 0.55);
+}
+
+.match-end-card {
+    width: min(460px, 100%);
+    text-align: center;
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px solid var(--accent-gold);
+    border-radius: 16px;
+    padding: 24px 20px;
+    box-shadow: 0 0 40px rgba(250, 204, 21, 0.25);
+}
+
+.match-end-overlay.lost .match-end-card {
+    border-color: var(--accent-red);
+    box-shadow: 0 0 40px rgba(244, 63, 94, 0.2);
+}
+
+.match-end-title {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    color: var(--accent-gold);
+    margin-bottom: 8px;
+}
+
+.match-end-overlay.lost .match-end-title {
+    color: #fda4af;
+}
+
+.match-end-score {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+}
+
+.match-end-reason,
+.match-end-mvp,
+.match-end-wait {
+    color: #cbd5e1;
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+}
+
+.match-end-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
 /* BARRE D'AIDE CONTRÔLES EN BAS */
 .controls-Overlay-bar {
     position: absolute;

@@ -328,6 +328,7 @@ export const GAME_MODES = {
         playersPerTeam: 3,
         isHalfCourt: true,
         targetScore: 21,
+        gameDuration: 420, // secondes de jeu (le chrono s'arrête pendant les remises en jeu)
         description: 'Demi-terrain rapide. Check-ball en haut de la raquette et sortie obligatoire derrière l\'arc après rebond défensif.'
     },
     '4v4': {
@@ -336,6 +337,7 @@ export const GAME_MODES = {
         playersPerTeam: 4,
         isHalfCourt: true,
         targetScore: 21,
+        gameDuration: 480,
         description: 'Demi-terrain intense à 8 joueurs sur le parquet. Idéal pour combiner écrans, coupes et tirs extérieurs.'
     },
     '5v5': {
@@ -344,6 +346,7 @@ export const GAME_MODES = {
         playersPerTeam: 5,
         isHalfCourt: false,
         targetScore: 30,
+        gameDuration: 720, // 2 mi-temps de 6 minutes
         description: 'Match réglementaire tout-terrain avec transitions attaque/défense sur les deux paniers.'
     }
 };

@@ -492,7 +492,10 @@ export class GameEngine {
         const isAuthority = this.isAuthority;
         for (const ent of this.entities.values()) {
             if (ent.isBot && isAuthority && !matchOver) {
+                const x = ent.pos.x;
+                const z = ent.pos.z;
                 this.updateBotAI(ent, dt);
+                this.faceRunningDirection(ent, x, z, dt); // repli : il se retourne et court (BotAI.js)
             }
         }
 
@@ -568,12 +571,18 @@ export class GameEngine {
 
         // 7. Appliquer les positions et animations aux Meshes 3D
         for (const ent of this.entities.values()) {
-            ent.mesh.root.position.copy(ent.pos);
+            const root = ent.mesh.root;
+            // Le corps pivote vite mais pas d'un coup (rotY saute quand la direction change) ; d'un coup
+            // seulement quand le joueur est replacé (remise en jeu)
+            const placed = root.position.distanceToSquared(ent.pos) > 4;
+            const dYaw = Math.atan2(Math.sin(ent.rotY - root.rotation.y), Math.cos(ent.rotY - root.rotation.y));
+            const turn = THREE.MathUtils.clamp(dYaw * Math.min(1, dt * 16), -14 * dt, 14 * dt); // demi-tour en ~0,25 s
+            root.rotation.y = placed ? ent.rotY : root.rotation.y + turn;
+            root.position.copy(ent.pos);
             // Garder l'anneau de sélection plaqué sur le parquet même quand le joueur saute
             if (ent.mesh.selectionRing) {
                 ent.mesh.selectionRing.position.y = Math.max(0.02, 0.02 - ent.pos.y);
             }
-            ent.mesh.root.rotation.y = ent.rotY;
             ent.mesh.updateAnimation(dt, ent.state, this.animationInfo(ent));
             this.updateScreenMarker(ent);
         }

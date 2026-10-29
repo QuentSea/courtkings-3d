@@ -309,6 +309,35 @@
     d'immédiatement ; le ballon est devant la poitrine pendant l'armé (Ball.js).
   - Testé en images (armé, montée, lâcher, lay-up, dunk, pas chassés, fin de match) ; 5v5 de bots sans erreur,
     animations ~1,3 ms par image pour 10 joueurs. Invités pas retestés.
+- **Course sans patiner** (29 octobre 2026, le joueur trouvait que les personnages couraient bizarrement) :
+  - Cause : `Jog_Fwd_Loop` du pack fait de grands bonds (5,5 m par cycle de 2 pas, ~6 m/s à vitesse 1) et était joué
+    plus vite (référence 3,6 m/s) : les jambes moulinaient, le pied d'appui glissait en arrière (pied vraiment posé
+    1 à 13 % du temps). Mesuré sur le pied (os `ball_leaf_l`), le clip tournant sur place.
+  - `locomotionBlend` : `Walk_Loop` + course + sprint mélangés selon la vitesse ; cadence 0,85 à 1,4 cycle/s,
+    la foulée fait le reste. `STRIDE` = foulée mesurée de chaque animation (le mélange donne une foulée
+    proportionnelle aux poids) → vitesse de lecture = vitesse / foulée du mélange. Pied posé 37 à 43 % du temps entre
+    3,5 et 5,5 m/s, 79 % en marchant. Pas chassés plus longs quand ça va vite (`shuffleStride`), pas pendant un demi-tour.
+  - GameEngine (étape 7) : le corps pivote vers `rotY` en douceur (au plus 14 rad/s, demi-tour en ~0,25 s), d'un coup
+    seulement après une remise en jeu ; Ball.js place le ballon tenu selon cette orientation affichée.
+  - `faceRunningDirection` (BotAI.js, après l'IA de chaque bot) : un bot qui recule ou glisse à plus de 3 m/s
+    (4,3 m/s sur le porteur) se retourne et court ; avant, les défenseurs remontaient tout le terrain à reculons.
+- **IA du porteur qui réfléchit** (29 octobre 2026, « l'IA fonce tout droit sous le panier pour dunker ») :
+  - Avant : un bot qui n'était pas très bon tireur (7 sur 10) allait en ligne droite au cercle et finissait sous 2,5 m,
+    dunk 6 fois sur 10 ; passes au hasard. Mesuré sur 4 min de 5v5 de bots : 67 % des tirs au cercle (11 dunks),
+    3 tirs à 3 points sur 43.
+  - Maintenant (BotAI.js) : réception → il lit la défense 0,35 à 0,85 s (`plan` HOLD) ; puis `decideHandler` compare
+    en points attendus (+ un peu de hasard) : tirer (`shotValue`, moins s'il n'est pas tireur), passer au mieux placé
+    (`bestPassTarget`, ligne de passe libre, `passLaneOpen`), attaquer le cercle si la route est libre (`laneBlocker`,
+    Moves.js), déborder son défenseur (crossover, accélération du côté libre), ou attendre (de moins en moins quand
+    le chrono de tir baisse). Raquette encombrée : attaquer vaut moins. Un défenseur s'interpose pendant l'attaque :
+    il s'arrête et relit.
+  - Près du cercle (`botFinish`, Moves.js) : route libre → dunk seulement pour un bon finisseur ; défenseur devant →
+    il compare ressortir le ballon, tir flottant (`botFloater`) et euro step. Alley-oops au moment des décisions.
+  - Tirs à 3 points des bots : 10 % de moins qu'à 2 points (`shotMakeChance`) ; à réussite égale, ils ne tiraient
+    plus que de loin. Mesuré ensuite (5 min 30 de 5v5 de bots) : 40 % au cercle (3 dunks), 36 % à 3 points, 24 % à
+    mi-distance, attaques de 8,5 s au lieu de 4,7 s, points marqués proches d'avant. 3v3 : 54 % à 3 points.
+  - Mesures faites dans le navigateur (match simulé image par image, minuteurs du jeu en temps simulé) ; pas de test
+    `node --test` : BotAI.js et Moves.js chargent Three.js.
 - **Menu caché pendant le match et pause** (29 octobre 2026, demandé par le joueur) : sur l'écran du match
   (`body.in-match`, posé par `switchScreen`), la barre de navigation, la barre d'outils du match et le bandeau des
   touches (`#controls-legend`) sont cachés ;

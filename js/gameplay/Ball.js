@@ -80,8 +80,9 @@ export const BallMethods = {
                 if (holder.state === 'DUNK') {
                     // Pendant le Dunk, le ballon est armé très haut dans la main droite au-dessus du joueur
                     const posScale = POSITIONS[holder.profile.position]?.scaleY || 1.0;
-                    const forwardX = Math.sin(holder.rotY) * 0.22;
-                    const forwardZ = Math.cos(holder.rotY) * 0.22;
+                    const yaw = holder.mesh.root.rotation.y; // orientation affichée (elle pivote en douceur)
+                    const forwardX = Math.sin(yaw) * 0.22;
+                    const forwardZ = Math.cos(yaw) * 0.22;
                     this.ball.pos.set(
                         holder.pos.x + forwardX,
                         holder.pos.y + 2.28 * posScale,
@@ -101,8 +102,9 @@ export const BallMethods = {
                     const side = holder.mesh.dribbleHand === 'RIGHT' ? 1 : -1;
                     const handSide = shooting ? side * (inAir ? 0.12 : 0) : side * 0.34;
                     const fwd = shooting && !inAir ? 0.34 : 0.28;
-                    const forwardX = Math.sin(holder.rotY) * fwd + Math.cos(holder.rotY) * handSide;
-                    const forwardZ = Math.cos(holder.rotY) * fwd - Math.sin(holder.rotY) * handSide;
+                    const yaw = holder.mesh.root.rotation.y; // orientation affichée : le ballon reste dans la main
+                    const forwardX = Math.sin(yaw) * fwd + Math.cos(yaw) * handSide;
+                    const forwardZ = Math.cos(yaw) * fwd - Math.sin(yaw) * handSide;
 
                     this.ball.pos.set(
                         holder.pos.x + forwardX,

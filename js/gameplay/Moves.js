@@ -11,6 +11,7 @@
  */
 
 import * as THREE from 'three';
+import { POSITIONS } from '../config/constants.js';
 
 const ALLEY_OOP_RANGE = 7;    // le receveur doit être à moins de 7 m du cercle
 const BOX_OUT_TIME = 0.35;    // le box-out tient tant qu'on le renouvelle (s)
@@ -57,13 +58,17 @@ export const MoveMethods = {
         ent.state = layup ? 'SHOOT' : 'DUNK';
     },
 
+    /** Réussite d'un lay-up selon la finition et la contestation (sert aussi aux bots pour décider) */
+    finishChance(player, contest) {
+        const finishStat = player.profile.attributes?.finishing || 78;
+        return clamp(0.62 + ((finishStat - 60) / 39) * 0.26 - contest * 0.35, 0.3, 0.92);
+    },
+
     /** Lay-up lâché en haut du saut (hôte) : finition contre contestation, l'euro step divise la contestation par 2 */
     finishLayup(player) {
         const hoop = player.dunkHoop || this.getAttackingHoopForTeam(player.team);
-        const finishStat = player.profile.attributes?.finishing || 78;
         const contest = this.calculateContestFactor(player) * (player.dunkMid ? 0.5 : 1);
-        const prob = clamp(0.62 + ((finishStat - 60) / 39) * 0.26 - contest * 0.35, 0.3, 0.92);
-        const isMake = Math.random() < prob;
+        const isMake = Math.random() < this.finishChance(player, contest);
         this.launchShotBall(player, hoop, { isMake, isGreen: false, isThreePointer: false, kind: 'layup' }, false);
         if (player.isLocal) {
             this.shotMeter.showFeedback(player.dunkMid ? 'EURO STEP' : 'LAY-UP', Math.round(contest * 100),
@@ -71,13 +76,78 @@ export const MoveMethods = {
         }
     },
 
-    /** Bot porteur près du cercle : dunk ou lay-up, euro step si un défenseur est devant (hôte) */
-    startBotFinish(bot, hoop, dist) {
+    /**
+     * Défenseur sur la route du cercle : devant le porteur, à moins de 0,95 m de la ligne porteur–cercle (le plus
+     * proche). ahead : distance devant lui ; lat : décalage, positif à sa droite quand il fait face au cercle
+     */
+    laneBlocker(player, rim) {
+        const dx = rim.x - player.pos.x;
+        const dz = rim.z - player.pos.z;
+        const len = Math.hypot(dx, dz) || 1;
+        let best = null;
+        for (const o of this.entities.values()) {
+            if (o.team === player.team) continue;
+            const ox = o.pos.x - player.pos.x;
+            const oz = o.pos.z - player.pos.z;
+            const ahead = (ox * dx + oz * dz) / len;
+            const lat = (ox * dz - oz * dx) / len;
+            if (ahead > 0.2 && ahead < len + 0.3 && Math.abs(lat) < 0.95 && (!best || ahead < best.ahead)) {
+                best = { ent: o, ahead, lat };
+            }
+        }
+        return best;
+    },
+
+    /** Distance au cercle où un bot qui attaque décolle (2,4 à 3,2 m selon la finition) */
+    botFinishStart(bot) {
+        return 2.4 + clamp(((bot.profile.attributes?.finishing || 75) - 60) / 39, 0, 1) * 0.8;
+    },
+
+    /**
+     * Bot porteur près du cercle (hôte) : route libre, il finit (dunk s'il en est capable). Un défenseur entre lui
+     * et le cercle : il compare (points attendus) ressortir le ballon vers un coéquipier, un petit tir flottant
+     * et un euro step qui contourne le défenseur
+     */
+    botFinish(bot, hoop, dist, isTeammateOfHuman = false) {
+        const blocker = this.laneBlocker(bot, hoop.rimPos);
+        const contest = this.calculateContestFactor(bot);
+        if (!blocker || blocker.ahead > dist) {
+            // Personne devant : un défenseur à côté ou derrière n'empêche pas de dunker
+            this.startBotFinish(bot, hoop, dist, { open: contest < 0.5 });
+            return;
+        }
+        const pass = this.bestPassTarget(bot, hoop, isTeammateOfHuman);
+        const noise = () => 0.85 + Math.random() * 0.3;
+        const euro = 2 * this.finishChance(bot, contest * 0.5) * noise();
+        const floater = dist > 2.3 ? 2 * this.floaterChance(bot, contest) * noise() : 0;
+        const kick = pass ? pass.value * 0.9 * noise() : 0;
+        if (kick > euro && kick > floater) this.botPass(bot, pass.ent);
+        else if (floater > euro) this.botFloater(bot, hoop);
+        // Euro step du côté où le défenseur n'est pas (euro = 1 : pas vers sa gauche)
+        else this.startBotFinish(bot, hoop, dist, { open: false, euro: blocker.lat >= 0 ? 1 : -1 });
+    },
+
+    /** Dunk seulement route libre et pour un bon finisseur (plus facile pour un grand) ; sinon lay-up */
+    startBotFinish(bot, hoop, dist, { open = true, euro = 0 } = {}) {
         const finishStat = bot.profile.attributes?.finishing || 75;
-        const kind = finishStat >= 80 && Math.random() < 0.6 ? 'DUNK' : 'LAYUP';
-        const euro = kind === 'LAYUP' && this.calculateContestFactor(bot) > 0.35 && Math.random() < 0.4
-            ? (Math.random() < 0.5 ? 1 : -1) : 0;
-        this.startDunkDrive(bot, hoop, dist, { kind, euro });
+        const big = (POSITIONS[bot.profile.position]?.scaleY || 1) >= 1.05;
+        const dunk = open && finishStat >= (big ? 76 : 82) && Math.random() < 0.7;
+        this.startDunkDrive(bot, hoop, dist, { kind: dunk ? 'DUNK' : 'LAYUP', euro: dunk ? 0 : euro });
+    },
+
+    floaterChance(bot, contest) {
+        const finishStat = bot.profile.attributes?.finishing || 75;
+        return clamp(0.36 + ((finishStat - 60) / 39) * 0.2 - contest * 0.25, 0.22, 0.58);
+    },
+
+    /** Petit tir flottant par-dessus le défenseur, au-dessus de la raquette (hôte) */
+    botFloater(bot, hoop) {
+        const prob = this.floaterChance(bot, this.calculateContestFactor(bot));
+        this.launchShotBall(bot, hoop, { isMake: Math.random() < prob, isGreen: false, isThreePointer: false });
+        bot.state = 'SHOOT';
+        bot.vel.y = 3.2;
+        bot.aiThinkTimer = 1.6;
+        bot.plan = null;
     },
 
     // ---------------------------------------------------------------- Alley-oop

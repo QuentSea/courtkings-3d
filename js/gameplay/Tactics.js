@@ -264,7 +264,7 @@ export const TacticMethods = {
         }
         bot.postTimer = null;
         if (distToHoop < 2.6) {
-            this.startBotFinish(bot, hoop, distToHoop);
+            this.botFinish(bot, hoop, distToHoop);
         } else {
             const contest = this.botShotMove(bot, hoop, distToHoop, Math.max(0.36, this.calculateContestFactor(bot)));
             const stat = bot.profile.attributes?.shooting || 70;

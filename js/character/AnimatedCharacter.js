@@ -36,6 +36,7 @@ const PACK_BEARD_BY_STYLE = {
 
 const CLIPS = {
     idle: 'Idle_Loop',
+    walk: 'Walk_Loop',
     jog: 'Jog_Fwd_Loop',
     sprint: 'Sprint_Loop',
     crouchIdle: 'Crouch_Idle_Loop',
@@ -43,11 +44,14 @@ const CLIPS = {
     air: 'Jump_Loop',
     dance: 'Dance_Loop'
 };
-const LOCOMOTION = new Set(['jog', 'sprint', 'crouchMove']);
+const LOCOMOTION = new Set(['walk', 'jog', 'sprint', 'crouchMove']);
+// Distance parcourue par cycle de pas (2 pas) de chaque animation, à l'échelle 1 : mesurée sur le pied d'appui.
+// La course du pack fait de grands bonds (5,5 m par cycle) : mélangée à la marche, la foulée raccourcit
+// (le mélange garde une foulée proportionnelle aux poids, vérifié à 30, 50 et 70 %)
+const STRIDE = { walk: 1.42, jog: 5.49, sprint: 5.83, crouchMove: 1.57 };
 // Part de l'accroupi du pack dans la posture de défense (1 = accroupi complet, trop bas)
 const DEFENSE_CROUCH = 0.3;
 const LAND_TIME = 0.28;      // amorti des genoux à la réception d'un saut (s)
-const SHUFFLE_STRIDE = 0.7;  // distance parcourue par cycle de pas chassés (m)
 const NO_INFO = {};
 
 /** Hauteur du ballon dribblé (Ball.js place le ballon, la main de dribble le suit) */
@@ -87,6 +91,8 @@ export class AnimatedCharacter {
         this.lastPos = null;
         this.lastYaw = 0;
         this.lateral = false;
+        this.cadence = 1;       // cycles de pas par seconde des animations de déplacement
+        this.shuffleStride = 0.7;
         this.shufflePhase = 0;
         this.shuffleW = 0;
         this.landTimer = 0;
@@ -399,15 +405,20 @@ export class AnimatedCharacter {
 
         const airborne = p.y > 0.05;
         const moving = this.speed > 0.6;
-        const dribbling = state === 'DRIBBLE' || state === 'CROSSOVER';
-        // De côté (défenseur face à son joueur) : pas chassés ; vers l'arrière : animation jouée à l'envers
-        this.lateral = moving && !airborne && !dribbling && Math.abs(this.latSpeed) > Math.abs(this.fwdSpeed) * 1.2;
-        const backward = moving && !this.lateral && this.fwdSpeed < -0.4 * this.speed;
-        if (this.lateral) this.shufflePhase = (this.shufflePhase + Math.abs(this.latSpeed) * dt / SHUFFLE_STRIDE) % 1;
+        // De côté (défenseur face à son joueur) : pas chassés ; vers l'arrière : animation jouée à l'envers.
+        // Pas pendant un demi-tour (le corps pivote, le déplacement n'a pas encore suivi)
+        const turning = Math.abs(this.turnRate) > 5;
+        this.lateral = moving && !airborne && !turning && this.speed < 3.8 &&
+            Math.abs(this.latSpeed) > Math.abs(this.fwdSpeed) * 1.2;
+        const backward = moving && !this.lateral && !turning && this.fwdSpeed < -0.4 * this.speed;
+        if (this.lateral) {
+            // Pas chassés plus longs quand on va vite (sinon les pieds s'affolent)
+            this.shuffleStride = THREE.MathUtils.clamp(0.5 + 0.13 * Math.abs(this.latSpeed), 0.6, 1.0);
+            this.shufflePhase = (this.shufflePhase + Math.abs(this.latSpeed) * dt / this.shuffleStride) % 1;
+        }
 
         const low = state === 'DEFENSE' || info.boxOut ? DEFENSE_CROUCH : 0.12;
-        let key = moving ? 'jog' : 'idle';
-        if (state === 'RUN') key = this.speed > 5.2 ? 'sprint' : 'jog';
+        const loco = moving ? this.locomotionBlend(this.speed) : { idle: 1 };
         if (info.matchEnd === 'WIN' && this.actions.dance) {
             this.playAction('dance', 0.4);
         } else if (airborne || state === 'CONTEST' || state === 'DUNK') {
@@ -416,23 +427,43 @@ export class AnimatedCharacter {
             this.playBlend({ crouchIdle: low, idle: 1 - low }, 0.2);
         } else if (state === 'DEFENSE' || info.boxOut) {
             // Posture de défense : l'accroupi du pack mélangé avec la pose debout (genoux fléchis, dos droit)
-            this.playBlend(moving ? { crouchMove: low, jog: 1 - low } : { crouchIdle: low, idle: 1 - low }, 0.2);
+            const crouch = moving ? 'crouchMove' : 'crouchIdle';
+            const blend = { [crouch]: low };
+            for (const [k, w] of Object.entries(loco)) blend[k] = w * (1 - low);
+            this.playBlend(blend, 0.2);
         } else if (state === 'SCREEN') {
             // Écran : appuis larges, un peu fléchi, immobile
             this.playBlend({ crouchIdle: 0.2, idle: 0.8 }, 0.15);
         } else {
-            this.playAction(key, 0.2);
+            this.playBlend(loco, 0.2);
         }
 
+        // Rythme des pas : le pied d'appui reste sur place (foulée du mélange = somme des foulées pondérées)
+        let stride = 0;
+        for (const k of LOCOMOTION) stride += (this.blendTargets[k] || 0) * STRIDE[k];
+        if (stride > 0) this.cadence = THREE.MathUtils.clamp(this.speed / (stride * this.bodyGroup.scale.z), 0.4, 1.8);
         const dir = backward ? -1 : 1;
         for (const [k, action] of Object.entries(this.actions)) {
-            const ref = k === 'sprint' ? 6.5 : k === 'jog' || k === 'crouchMove' ? 3.6 : 0;
-            action.timeScale = ref ? dir * THREE.MathUtils.clamp(this.speed / ref, 0.6, 1.6) : 1;
+            action.timeScale = LOCOMOTION.has(k) ? dir * this.cadence * action.getClip().duration : 1;
         }
         this.blendActions(dt);
         this.mixer.update(dt);
 
         this.applyProcedural(dt, state, info, airborne);
+    }
+
+    /**
+     * Marche, course et sprint mélangés selon la vitesse (m/s) : des pas un peu plus rapides quand on va vite
+     * (0,85 à 1,4 cycle par seconde), la foulée fait le reste. Seule, la course du pack donnerait des bonds de
+     * 2,7 m à petite cadence ; jouée plus vite, les pieds glissaient sur le parquet
+     */
+    locomotionBlend(speed) {
+        const s = speed / this.bodyGroup.scale.z;
+        const cadence = THREE.MathUtils.clamp(0.85 + 0.07 * s, 0.8, 1.4);
+        const sprint = THREE.MathUtils.clamp((s - 5.5) / 2, 0, 1);
+        const runStride = STRIDE.jog + (STRIDE.sprint - STRIDE.jog) * sprint;
+        const run = THREE.MathUtils.clamp((s / cadence - STRIDE.walk) / (runStride - STRIDE.walk), 0, 1);
+        return { walk: 1 - run, jog: run * (1 - sprint), sprint: run * sprint };
     }
 
     /**
@@ -577,7 +608,7 @@ export class AnimatedCharacter {
         // 4. Jambes : pieds remis à leur place (genoux qui plient), pas chassés de côté
         if (legsIK) {
             const m = Math.sign(this.latSpeed) || 1; // côté où l'on va
-            const W = SHUFFLE_STRIDE / 2;
+            const W = this.shuffleStride / 2;
             const stepOf = (swingStart) => {
                 let u = (this.shufflePhase - swingStart + 1) % 1;
                 if (u < 0.5) {

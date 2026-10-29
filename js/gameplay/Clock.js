@@ -207,6 +207,7 @@ export const ClockMethods = {
         const won = me && me.team === r.winner;
         title.textContent = me ? (won ? '🏆 VICTOIRE !' : 'DÉFAITE') : `VICTOIRE DE L'ÉQUIPE ${r.winner}`;
         overlay.classList.toggle('lost', !!me && !won);
+        if (!me || won) this.launchConfetti(r.winner); // Effects.js
         score.textContent = `ÉQUIPE A ${r.scoreA} — ${r.scoreB} ÉQUIPE B`;
         reason.textContent = `Victoire de l'équipe ${r.winner} : ${r.endReason.toLowerCase()}`;
 

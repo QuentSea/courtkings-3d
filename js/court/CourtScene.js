@@ -359,8 +359,9 @@ export class CourtScene {
         rim.position.set(x, rimHeight, rimZ);
         hoopGroup.add(rim);
 
-        // Filet (Net) en maillage conique filaire blanc
+        // Filet (Net) en maillage conique filaire blanc ; accroché par le haut (il s'étire vers le bas, animateNet)
         const netGeo = new THREE.CylinderGeometry(0.23, 0.15, 0.42, 14, 4, true);
+        netGeo.translate(0, -0.21, 0);
         const netMat = new THREE.MeshBasicMaterial({
             color: '#f8fafc',
             wireframe: true,
@@ -368,7 +369,7 @@ export class CourtScene {
             opacity: 0.85
         });
         const net = new THREE.Mesh(netGeo, netMat);
-        net.position.set(x, rimHeight - 0.21, rimZ);
+        net.position.set(x, rimHeight, rimZ);
         hoopGroup.add(net);
 
         this.courtGroup.add(hoopGroup);
@@ -377,7 +378,9 @@ export class CourtScene {
             side,
             rimPos: new THREE.Vector3(x, rimHeight, rimZ),
             backboardZ,
-            threePointRadius: 5.55
+            threePointRadius: 5.55,
+            net,
+            netTime: -1 // > 0 : le filet bouge depuis netTime secondes
         });
 
         // Cercle / Arc 3D lumineux au sol délimitant exactement la Zone 2 Points (intérieur) et 3 Points (extérieur)
@@ -657,5 +660,29 @@ export class CourtScene {
             return this.hoops[0];
         }
         return this.hoops.find(h => h.side === attackingSide) || this.hoops[0];
+    }
+
+    /** Le ballon passe dans le filet du panier le plus proche de `pos` : il s'étire et oscille un instant */
+    animateNet(pos) {
+        let hoop = null;
+        for (const h of this.hoops) {
+            if (!hoop || h.rimPos.distanceTo(pos) < hoop.rimPos.distanceTo(pos)) hoop = h;
+        }
+        if (hoop) hoop.netTime = 0;
+    }
+
+    /** À chaque image : oscillation amortie des filets qui viennent de bouger */
+    updateNets(dt) {
+        for (const h of this.hoops) {
+            if (h.netTime < 0) continue;
+            h.netTime += dt;
+            const t = h.netTime;
+            const wave = Math.exp(-5 * t) * Math.sin(16 * t);
+            h.net.scale.set(1 - 0.18 * wave, 1 + 0.45 * wave, 1 - 0.18 * wave);
+            if (t > 1.2) {
+                h.netTime = -1;
+                h.net.scale.set(1, 1, 1);
+            }
+        }
     }
 }

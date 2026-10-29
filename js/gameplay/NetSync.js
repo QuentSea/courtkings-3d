@@ -192,7 +192,10 @@ export const NetSyncMethods = {
             this.alertSeq = packet.alert.seq;
             if (packet.alert.text) this.showRuleAlert(packet.alert.text);
         }
-        for (const [name, x, z] of packet.sfx || []) this.sound.play(name, { x, y: 1.5, z }, this.camera);
+        for (const [name, x, z] of packet.sfx || []) {
+            this.sound.play(name, { x, y: 1.5, z }, this.camera);
+            this.soundEffects(name, new THREE.Vector3(x, 3, z)); // filet, secousse (Effects.js)
+        }
     },
 
     /** Hôte : un tir adverse est-il encore en l'air (ou en préparation) au moment où le contre arrive ? */

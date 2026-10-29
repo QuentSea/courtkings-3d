@@ -37,6 +37,7 @@ export const ActionsMethods = {
             ? Math.max(0.5, Math.min(0.8, 0.45 + distToRim * 0.09))
             : Math.max(0.38, Math.min(0.68, 0.34 + distToRim * 0.085)));
         this.beginFinish(player, hoop, player.pos.clone(), targetLanding, mid, kind, dur);
+        if (kind === 'DUNK') this.startDunkCinema(player, hoop, dur); // ralenti seul contre les bots (Effects.js)
 
         if (player.isLocal && !silent) this.network.sendGameEvent('DUNK_START', {
             playerId: player.id,

@@ -1186,6 +1186,14 @@ body {
 }
 
 /* ÉCRAN DE FIN DE MATCH */
+/* Confettis de la victoire (Effects.js), par-dessus l'écran de fin sans bloquer les clics */
+.confetti-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+}
+
 .match-end-overlay {
     position: absolute;
     inset: 0;

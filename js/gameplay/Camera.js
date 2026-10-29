@@ -15,8 +15,14 @@ export const CameraMethods = {
         return this.getAttackingHoopForTeam(this.matchRules.possessionTeam);
     },
 
-    updateCamera() {
+    updateCamera(dt = 0) {
         const me = this.getLocalEntity();
+        // Dunk au ralenti (Effects.js) : caméra près du cercle ; les commandes gardent leur sens d'avant
+        if (this.cinema) {
+            this.placeCinemaCamera();
+            this.shakeCamera(dt);
+            return;
+        }
         if (!me) return;
 
         const hoop = this.getCameraFocusHoop(me);
@@ -44,6 +50,16 @@ export const CameraMethods = {
         // Caméra tournée vers le sud (+Z) : les touches et le stick s'inversent pour rester « haut = haut de l'écran »
         this.camera.getWorldDirection(this.cameraForward);
         this.viewFlipped = this.cameraForward.z > 0;
+        this.shakeCamera(dt);
+    },
+
+    /** Secousse au smash d'un dunk (Effects.js) : quelques centimètres au hasard, de moins en moins */
+    shakeCamera(dt) {
+        if (!(this.cameraShake > 0)) return;
+        this.cameraShake -= dt;
+        const a = Math.max(0, this.cameraShake) * 0.3;
+        this.camera.position.x += (Math.random() - 0.5) * a;
+        this.camera.position.y += (Math.random() - 0.5) * a;
     },
 
     /**
@@ -76,7 +92,7 @@ export const CameraMethods = {
             const m = pl.s.material.opacity < 0.5 ? 1.15 : 1;
             const hidden = shown.some(o => Math.abs(pl.x - o.x) < (pl.w + o.w) * m && Math.abs(pl.y - o.y) < (pl.h + o.h) * m);
             if (!hidden) shown.push(pl);
-            const target = hidden ? 0 : 1;
+            const target = hidden || this.cinema ? 0 : 1; // dunk au ralenti : image dégagée (Effects.js)
             pl.s.material.opacity += (target - pl.s.material.opacity) * Math.min(1, dt * 12);
         }
     }

@@ -39,6 +39,7 @@ import { MoveMethods } from './Moves.js';
 import { TacticMethods } from './Tactics.js';
 import { KeyBindings, ACTIONS } from './Bindings.js';
 import { SoundFX } from '../audio/SoundFX.js';
+import { EffectsMethods } from './Effects.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -287,6 +288,8 @@ export class GameEngine {
         }
 
         this.setMenuOpen(false); // le match commence menu fermé
+        this.slowMo = 0;
+        this.cinema = null;
         this.resetMatchClock();
         this.resetPositionsForCheckBall('A');
         this.updateScoreboardUI();
@@ -393,6 +396,7 @@ export class GameEngine {
     playSound(name, pos = null, local = false) {
         if (!this.isAuthority && !local) return;
         this.sound.play(name, pos, this.camera);
+        this.soundEffects(name, pos); // filet, secousse (Effects.js)
         const others = Object.keys(this.network.lobbyState?.players || {}).length > 1;
         if (this.isAuthority && !local && others && this.pendingSfx.length < 8) {
             this.pendingSfx.push([name, +(pos?.x ?? 0).toFixed(1), +(pos?.z ?? 0).toFixed(1)]);
@@ -493,6 +497,7 @@ export class GameEngine {
             return;
         }
         if (render) this.quality.sample(dt);
+        dt = this.gameDt(dt); // dunk au ralenti (Effects.js)
 
         if (this.crossoverCooldown > 0) this.crossoverCooldown -= dt;
 
@@ -646,6 +651,7 @@ export class GameEngine {
 
         // 9. Caméra dynamique 2K Cam / Suivi
         this.updateCamera(dt);
+        this.court.updateNets(dt);
         this.declutterNameplates(dt);
 
         // 10. Synchronisation Réseau Temps Réel (20 Hz) :
@@ -670,4 +676,4 @@ export class GameEngine {
 }
 
 Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods,
-    NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods, FoulMethods, MoveMethods, TacticMethods);
+    NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods, FoulMethods, MoveMethods, TacticMethods, EffectsMethods);

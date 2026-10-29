@@ -290,6 +290,15 @@
   - Testé : tir passé sur G (Espace ne tire plus, G lance et relâche le tir, gardé dans le navigateur), manette
     simulée (passe sur RB, A ne passe plus, X maintenu/relâché tire, croix ↑ fait bouger), touches par défaut,
     Échap ferme. Vraie manette pas testée.
+- **Menu caché pendant le match et pause** (29 octobre 2026, demandé par le joueur) : sur l'écran du match
+  (`body.in-match`, posé par `switchScreen`), la barre de navigation et la barre d'outils du match sont cachées ;
+  l'écran du match prend toute la hauteur. **Échap** (fixe), **P** ou **Start** (action `pause`, réglable) →
+  `setMenuOpen` (Controls.js) : classe `menu-open` (barre du haut par-dessus, tableau de score décalé de 64 px),
+  carte `#pause-overlay` avec « Reprendre ». Seul contre les bots (`lobbyState.players` ≤ 1) : `paused`, `update`
+  ne fait plus avancer le match (seulement la manette, pour Start). À plusieurs : le match continue, mais le joueur
+  local ne reçoit plus ses commandes. Menu fermé au début d'un match et en quittant l'écran du match ; Échap dans la
+  fenêtre « Touches » ne ferme que la fenêtre. Testé : barre cachée, pause (chrono arrêté), reprise, P, Échap dans
+  « Touches », partie à plusieurs simulée (chrono qui tourne, joueur immobile).
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

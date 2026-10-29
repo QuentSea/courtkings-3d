@@ -1496,3 +1496,39 @@ kbd {
     gap: 10px;
     margin-top: 12px;
 }
+
+/* Pendant le match : menu du haut caché, affiché par Échap (classe menu-open, Controls.js) */
+body.in-match #screen-match { height: 100vh; }
+body.in-match .top-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+body.in-match:not(.menu-open) .top-navbar,
+body.in-match:not(.menu-open) .match-quick-toolbar { display: none; }
+body.in-match.menu-open .match-hud-top { top: 64px; }
+
+.pause-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 35;
+    width: min(420px, calc(100% - 32px));
+    padding: 22px 20px;
+    text-align: center;
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px solid var(--accent-blue);
+    border-radius: 16px;
+}
+.pause-title {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    color: var(--text-main);
+}
+.pause-text {
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    margin: 8px 0 14px;
+}

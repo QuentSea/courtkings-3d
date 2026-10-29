@@ -235,6 +235,9 @@ class CourtKingsApp {
             this.switchScreen('lobby');
         });
 
+        // Pause : bouton « Reprendre »
+        document.getElementById('btn-pause-resume')?.addEventListener('click', () => this.gameEngine.setMenuOpen(false));
+
         // Touches réglables (Bindings.js) : fenêtre « Touches » et rappel en bas de l'écran du match
         this.gameEngine.bindingsPanel = new BindingsPanel(this.gameEngine);
         this.gameEngine.renderControlsLegend();
@@ -323,6 +326,9 @@ class CourtKingsApp {
 
     switchScreen(screenName) {
         this.currentScreen = screenName;
+        // Sur le terrain, le menu du haut est caché (Échap l'affiche) ; ailleurs, le match reprend sans pause
+        document.body.classList.toggle('in-match', screenName === 'match');
+        if (screenName !== 'match' && this.gameEngine?.menuOpen) this.gameEngine.setMenuOpen(false);
         document.querySelectorAll('.app-screen').forEach((sec) => {
             sec.classList.toggle('active', sec.id === `screen-${screenName}`);
         });

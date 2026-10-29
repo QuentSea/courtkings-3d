@@ -36,6 +36,13 @@ export const ControlsMethods = {
             // Saisie dans un champ (nom du joueur, salon) ou fenêtre « Touches » ouverte : pas pour le jeu
             if (e.target.closest?.('input, textarea, select') || this.bindingsOpen) return;
             const bound = this.bindings.actionsFor('keys', e.code);
+            // Échap (ou la touche de pause) : menu du haut et pause ; menu ouvert : le joueur ne bouge plus
+            if ((e.code === 'Escape' || bound.includes('pause')) && this.canPause()) {
+                e.preventDefault();
+                if (!e.repeat) this.togglePause();
+                return;
+            }
+            if (this.menuOpen) return;
             if (bound.length && this.isRunning) e.preventDefault(); // Espace et flèches ne font pas défiler la page
             if (!this.isRunning || this.matchRules.matchOver) return;
             this.keys[e.code] = true;
@@ -55,6 +62,38 @@ export const ControlsMethods = {
                 this.executeShotRelease(me);
             }
         });
+    },
+
+    /** Pause possible : match en cours, affiché à l'écran, pas encore fini */
+    canPause() {
+        return this.isRunning && !this.matchRules.matchOver && document.body.classList.contains('in-match');
+    },
+
+    togglePause() {
+        this.setMenuOpen(!this.menuOpen);
+    },
+
+    /**
+     * Menu du haut (barre de navigation + barre d'outils du match) : caché pendant le match, affiché par Échap.
+     * Seul contre les bots, le match est en pause ; à plusieurs, il continue (les autres jouent) mais ton joueur
+     * ne reçoit plus tes commandes
+     */
+    setMenuOpen(open) {
+        this.menuOpen = open;
+        const solo = Object.keys(this.network.lobbyState?.players || {}).length <= 1;
+        this.paused = open && solo;
+        document.body.classList.toggle('menu-open', open);
+        if (open) {
+            this.keys = {};
+            if (this.shotMeter.active) this.shotMeter.cancel();
+        }
+        const overlay = document.getElementById('pause-overlay');
+        if (!overlay) return;
+        overlay.classList.toggle('hidden', !open);
+        document.getElementById('pause-title').textContent = this.paused ? '⏸ PAUSE' : '📋 MENU';
+        document.getElementById('pause-text').textContent = this.paused
+            ? 'Le match est arrêté. Échap (ou Start) pour reprendre.'
+            : 'Partie à plusieurs : le match continue, ton joueur ne bouge plus. Échap (ou Start) pour revenir au jeu.';
     },
 
     /** Action tenue au clavier (déplacement, sprint, posture) */
@@ -207,8 +246,13 @@ export const ControlsMethods = {
         const wasPressed = (idx) => !!this.gamepadState.prevButtons[idx];
 
         const me = this.getLocalEntity();
-        // Fenêtre « Touches » ouverte : la manette sert au réglage, pas au match
-        const playing = !!me && !this.matchRules.matchOver && !this.bindingsOpen;
+        // Bouton de pause (Start par défaut) : ouvre ou ferme le menu
+        for (let i = 0; i < activePad.buttons.length; i++) {
+            if (isPressed(i) && !wasPressed(i) && !this.bindingsOpen && this.canPause() &&
+                this.bindings.actionsFor('pad', i).includes('pause')) this.togglePause();
+        }
+        // Fenêtre « Touches » ou menu ouverts : la manette ne commande plus le joueur
+        const playing = !!me && !this.matchRules.matchOver && !this.bindingsOpen && !this.menuOpen;
         if (playing) {
             for (let i = 0; i < activePad.buttons.length; i++) {
                 if (!isPressed(i) || wasPressed(i)) continue;

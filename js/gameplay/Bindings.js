@@ -24,7 +24,8 @@ export const ACTIONS = [
     { id: 'steal', label: 'Interception', keys: ['KeyF', null], pad: [1, null] },
     { id: 'sprint', label: 'Sprint (maintenir) · près du cercle : dunk', keys: ['ShiftLeft', 'ShiftRight'], pad: [7, 5] },
     { id: 'defend', label: 'Posture défensive (maintenir) · pendant un tir adverse : box-out', keys: ['ShiftLeft', 'KeyF'], pad: [6, null] },
-    { id: 'camera', label: 'Changer de caméra', keys: ['KeyV', null], pad: [8, null] }
+    { id: 'camera', label: 'Changer de caméra', keys: ['KeyV', null], pad: [8, null] },
+    { id: 'pause', label: 'Pause et menu (Échap marche toujours)', keys: ['KeyP', null], pad: [9, null] }
 ];
 
 // Une touche partagée lance la première de ces actions qui est possible (ex. Y : alley-oop sinon saut)
@@ -230,6 +231,7 @@ export class BindingsPanel {
         if (!this.engine.bindingsOpen) return;
         if (e.code === 'Escape') {
             e.preventDefault();
+            e.stopImmediatePropagation(); // Échap ferme cette fenêtre, sans ouvrir ni fermer la pause du match
             if (this.waiting) this.stopWaiting(); else this.close();
             return;
         }

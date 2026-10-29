@@ -67,6 +67,9 @@ export class GameEngine {
         // Touches réglables (Bindings.js) ; bindingsOpen : fenêtre « Touches » ouverte, le jeu ignore les commandes
         this.bindings = new KeyBindings();
         this.bindingsOpen = false;
+        // Menu du haut ouvert par Échap (Controls.js) ; paused : seul contre les bots, le match est arrêté
+        this.menuOpen = false;
+        this.paused = false;
 
         // État du Ballon & Règles
         this.ball = {
@@ -274,6 +277,7 @@ export class GameEngine {
             }
         }
 
+        this.setMenuOpen(false); // le match commence menu fermé
         this.resetMatchClock();
         this.resetPositionsForCheckBall('A');
         this.updateScoreboardUI();
@@ -425,6 +429,11 @@ export class GameEngine {
      */
     update(dt, render = true) {
         if (!this.isRunning) return;
+        if (this.paused) {
+            this.pollGamepadInput(); // Start pour reprendre
+            if (render) this.renderer.render(this.scene, this.camera);
+            return;
+        }
         if (render) this.quality.sample(dt);
 
         if (this.crossoverCooldown > 0) this.crossoverCooldown -= dt;

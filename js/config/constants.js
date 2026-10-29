@@ -361,5 +361,26 @@ export const GAME_MODES = {
         targetScore: 30,
         gameDuration: 720, // 2 mi-temps de 6 minutes
         description: 'Match réglementaire tout-terrain avec transitions attaque/défense sur les deux paniers.'
+    },
+    // Modes en solo (Practice.js), lancés depuis le salon sans réseau : pas de chrono, pas d'adversaire
+    training: {
+        id: 'training',
+        name: 'Entraînement',
+        playersPerTeam: 1,
+        isHalfCourt: true,
+        targetScore: Infinity,
+        gameDuration: Infinity,
+        practice: true,
+        description: 'Seul sur le terrain : le ballon revient après chaque tir.'
+    },
+    contest3: {
+        id: 'contest3',
+        name: 'Concours à 3 points',
+        playersPerTeam: 1,
+        isHalfCourt: true,
+        targetScore: Infinity,
+        gameDuration: Infinity,
+        practice: true,
+        description: '70 secondes, 5 emplacements de 5 ballons, le dernier vaut 2 points.'
     }
 };

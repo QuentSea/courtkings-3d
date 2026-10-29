@@ -57,7 +57,8 @@ export const ClockMethods = {
      */
     updateMatchClock(dt) {
         const r = this.matchRules;
-        if (!this.isAuthority || r.matchOver || r.deadBall) return;
+        // Modes en solo : pas de chronos de match (le concours a le sien, Practice.js)
+        if (!this.isAuthority || r.matchOver || r.deadBall || this.currentMode.practice) return;
         this.liveTime += dt; // temps de jeu réel, pour les passes décisives (MatchSheet.js)
 
         if (!r.goldenPoint) {

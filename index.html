@@ -292,6 +292,10 @@
                     <input type="checkbox" id="toggle-fill-bots" checked />
                     <span>Compléter les places vacantes avec des Bots IA</span>
                 </label>
+                <div class="mode-pills practice-pills" title="Modes en solo, sans les autres joueurs du salon">
+                    <button type="button" class="mode-pill" data-practice="training">🎯 ENTRAÎNEMENT</button>
+                    <button type="button" class="mode-pill" data-practice="contest3">🏀 CONCOURS À 3 POINTS</button>
+                </div>
                 <label class="bot-toggle" title="Niveau des bots qui jouent contre vous (choisi par l'hôte)">
                     <span>Bots adverses :</span>
                     <select id="lobby-difficulty" class="hud-btn hud-select">
@@ -390,6 +394,9 @@
             <!-- TACTIQUES EN COURS ET FAUTES D'ÉQUIPE (sous le score et la barre d'outils, qui peut prendre plusieurs lignes) -->
             <div id="hud-tactics" class="hud-tactics"></div>
 
+            <!-- MODES EN SOLO (Practice.js) : compteur de l'entraînement ou du concours, à la place du score -->
+            <div id="practice-hud" class="practice-hud"></div>
+
             <!-- BANNIÈRE D'ALERTE RÈGLES / GREEN RELEASE -->
             <div id="court-rule-toast" class="court-rule-toast hidden">CHECK BALL !</div>
 
@@ -398,6 +405,17 @@
                 <div id="pause-title" class="pause-title">⏸ PAUSE</div>
                 <p id="pause-text" class="pause-text"></p>
                 <button type="button" id="btn-pause-resume" class="btn-primary-glow">Reprendre</button>
+            </div>
+        </div>
+
+        <!-- FIN DU CONCOURS À 3 POINTS (Practice.js) -->
+        <div id="practice-result" class="practice-result hidden" role="dialog" aria-labelledby="practice-result-title">
+            <h2 id="practice-result-title" class="pause-title">🏀 Concours à 3 points</h2>
+            <p id="practice-result-score" class="practice-result-score"></p>
+            <p id="practice-result-text" class="pause-text"></p>
+            <div class="match-end-actions">
+                <button type="button" id="btn-practice-again" class="btn-primary-glow">Recommencer</button>
+                <button type="button" id="btn-practice-lobby" class="hud-btn">Retour au salon</button>
             </div>
         </div>
 

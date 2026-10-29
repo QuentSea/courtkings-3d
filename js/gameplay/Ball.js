@@ -220,6 +220,10 @@ export const BallMethods = {
         const alleyOop = !!dunker.alleyOopFrom;
         dunker.alleyOopFrom = null;
         this.playSound(isMake ? 'dunk' : 'rim', hoop.rimPos);
+        if (this.currentMode.practice) {
+            this.practiceDunk(isMake, hoop); // entraînement : le ballon revient (Practice.js)
+            return;
+        }
         if (foulerId) this.playSound('whistle', dunker.pos);
 
         if (isMake) {
@@ -272,6 +276,11 @@ export const BallMethods = {
             if (pts === 3) this.playSound('cheer', rim);
         } else {
             this.playSound(Math.random() < 0.3 ? 'board' : 'rim', rim);
+        }
+        // Entraînement, concours à 3 points : pas de score de match, le ballon revient (Practice.js)
+        if (this.currentMode.practice) {
+            this.practiceShot(outcome);
+            return;
         }
 
         if (outcome.isMake) {

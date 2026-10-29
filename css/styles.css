@@ -731,10 +731,13 @@ body {
     text-transform: uppercase;
 }
 
+/* Modes, modes en solo, bots : passent à la ligne au lieu de s'écraser (chaque bloc garde ses mots sur une ligne) */
 .lobby-mode-bar {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: 10px 16px;
     background: var(--bg-panel);
     border: 1px solid var(--border-subtle);
     border-radius: 10px;
@@ -755,6 +758,7 @@ body {
     font-family: var(--font-display);
     font-weight: 700;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .mode-pill.active {
@@ -769,6 +773,7 @@ body {
     gap: 8px;
     font-size: 0.84rem;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .lobby-mode-desc {
@@ -1603,6 +1608,46 @@ body.in-match.menu-open .match-hud-top { top: 64px; }
     font-family: var(--font-display);
     font-size: 1.8rem;
     color: var(--text-main);
+}
+
+/* Modes en solo (Practice.js) : bandeau à la place du score et des tactiques, résultat du concours */
+.practice-hud {
+    grid-column: 1 / -1;
+    justify-self: center;
+    max-width: 100%;
+    padding: 6px 16px;
+    border-radius: 99px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid var(--accent-gold);
+    color: #f8fafc;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-align: center;
+}
+body:not(.practice) .practice-hud,
+body.practice .scoreboard-card,
+body.practice .hud-tactics,
+body.practice [data-hud-mode] { display: none; }
+.mode-pills { flex-wrap: wrap; }
+.practice-result {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 45;
+    width: min(420px, calc(100% - 32px));
+    padding: 22px 20px;
+    text-align: center;
+    background: rgba(15, 23, 42, 0.96);
+    border: 2px solid var(--accent-gold);
+    border-radius: 16px;
+}
+.practice-result-score {
+    font-family: var(--font-display);
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--accent-gold);
 }
 .pause-text {
     color: var(--text-muted);

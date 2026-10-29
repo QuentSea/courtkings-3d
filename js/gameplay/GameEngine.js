@@ -40,6 +40,7 @@ import { TacticMethods } from './Tactics.js';
 import { KeyBindings, ACTIONS } from './Bindings.js';
 import { SoundFX } from '../audio/SoundFX.js';
 import { EffectsMethods } from './Effects.js';
+import { PracticeMethods } from './Practice.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -248,6 +249,9 @@ export class GameEngine {
         this.localPlayerId = localPeerId;
         this.currentMode = GAME_MODES[lobbyState.mode] || GAME_MODES['3v3'];
         this.difficulty = DIFFICULTY[lobbyState.difficulty] || DIFFICULTY.NORMAL;
+        // Modes en solo (Practice.js) : bandeau à la place du tableau de score ; remis à zéro pour un vrai match
+        this.practice = null;
+        document.body.classList.toggle('practice', !!this.currentMode.practice);
         this.court.buildCourt(this.currentMode.isHalfCourt);
 
         this.matchRules.scoreA = 0;
@@ -634,6 +638,7 @@ export class GameEngine {
         // 7. Mise à jour de la physique du Ballon
         this.updateBallPhysics(dt);
         this.updateDribbleSound();
+        this.updatePractice(dt); // entraînement, concours à 3 points (Practice.js)
 
         // 8. Vérification de la règle "Take Back" derrière l'arc des 3 points en Demi-terrain
         if (isAuthority && this.currentMode.isHalfCourt && this.matchRules.needsTakeBack && this.ball.holderId) {
@@ -657,7 +662,7 @@ export class GameEngine {
         // 10. Synchronisation Réseau Temps Réel (20 Hz) :
         // l'hôte envoie tout l'état du monde, un invité envoie seulement son joueur
         this.networkSyncTimer += dt;
-        if (this.networkSyncTimer >= 0.05) {
+        if (this.networkSyncTimer >= 0.05 && !this.currentMode.practice) { // modes en solo : rien à envoyer
             this.networkSyncTimer = 0;
             if (isAuthority) {
                 this.network.sendWorldState(this.buildWorldState());
@@ -676,4 +681,5 @@ export class GameEngine {
 }
 
 Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods,
-    NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods, FoulMethods, MoveMethods, TacticMethods, EffectsMethods);
+    NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods, FoulMethods, MoveMethods, TacticMethods, EffectsMethods,
+    PracticeMethods);

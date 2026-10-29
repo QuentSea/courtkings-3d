@@ -194,6 +194,22 @@ class CourtKingsApp {
             });
         }
 
+        // Modes en solo (Practice.js) : entraînement et concours à 3 points, sans réseau
+        const startPractice = (kind) => {
+            this.builder.saveProfile();
+            this.lastPractice = kind;
+            this.switchScreen('match');
+            this.gameEngine.startPractice(kind, this.network.localPeerId, this.builder.getProfile());
+        };
+        document.querySelectorAll('[data-practice]').forEach((btn) => {
+            btn.addEventListener('click', () => startPractice(btn.dataset.practice));
+        });
+        document.getElementById('btn-practice-again')?.addEventListener('click', () => startPractice(this.lastPractice || 'contest3'));
+        document.getElementById('btn-practice-lobby')?.addEventListener('click', () => {
+            document.getElementById('practice-result')?.classList.add('hidden');
+            this.switchScreen('lobby');
+        });
+
         // Niveau des bots adverses (l'hôte choisit)
         document.getElementById('lobby-difficulty')?.addEventListener('change', (e) => {
             this.network.setDifficulty(e.target.value);

@@ -308,9 +308,7 @@ export class GameEngine {
             rotY: 0,
             state: 'IDLE',
             aiThinkTimer: 0.8 + Math.random() * 0.8,
-            cutTimer: 1.5 + slotIndex * 1.1,
-            offBallPhase: 'PERIMETER', // 'PERIMETER', 'CUT_BASKET', 'POP_OUT'
-            targetOffBallSpot: null,
+            offBallPhase: 'PERIMETER', // 'CUT_BASKET' quand il coupe vers le cercle (Tactics.js, updateMotion)
             // Écrans (Screens.js)
             screenTimer: 0,      // > 0 : écran posé
             screenedTimer: 0,    // > 0 : bloqué par un écran (ralenti)
@@ -422,10 +420,11 @@ export class GameEngine {
                 const distSq = dx * dx + dz * dz;
 
                 if (distSq < minSeparation * minSeparation) {
-                    const dist = Math.sqrt(distSq) || 0.01;
+                    const dist = Math.sqrt(distSq);
                     const overlap = (minSeparation - dist) * 0.5;
-                    const nx = dx / dist;
-                    const nz = dz / dist;
+                    // Exactement au même endroit : pas de direction, on les écarte de côté
+                    const nx = dist > 1e-4 ? dx / dist : 1;
+                    const nz = dist > 1e-4 ? dz / dist : 0;
 
                     a.pos.x -= nx * overlap;
                     a.pos.z -= nz * overlap;
@@ -465,7 +464,7 @@ export class GameEngine {
         this.updateScreens(dt);
         this.updateMoveTimers(dt);
         this.updateFreeThrow(dt);
-        this.updateTactics();
+        this.updateTactics(dt);
         this.updateTacticsUI();
 
         // 0 bis. Lire l'état de la Manette (si connectée)

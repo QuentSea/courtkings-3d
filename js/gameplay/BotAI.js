@@ -61,8 +61,9 @@ export const BotAIMethods = {
                 bot.plan = { kind: 'HOLD', timer: contest < 0.2 ? 0.15 : 0.35 + Math.random() * 0.5 };
             }
 
-            // Près du cercle (pénétration, rebond offensif) : il finit selon la défense (Moves.js)
-            if (distToHoop < 2.5) {
+            // Près du cercle (pénétration, rebond offensif) : il finit selon la défense (Moves.js), sauf s'il a
+            // choisi de ressortir le ballon
+            if (distToHoop < 2.5 && !bot.plan?.backOut) {
                 this.botFinish(bot, hoop, distToHoop, isTeammateOfHuman);
                 bot.aiThinkTimer = 1.6;
                 return;
@@ -116,45 +117,19 @@ export const BotAIMethods = {
             // Isolation et jeu au poste : places fixes (Tactics.js)
             if (this.offBallPlayMove(bot, dt, botSpeed, hoop)) return;
 
-            // MOUVEMENT OFFENSIF DYNAMIQUE ("GIVE & GO" / APPELS DE BALLE / COUPES AU PANIER) :
-            const dirZ = hoop.side === 'NORTH' ? 1 : -1;
-            const sideSign = (bot.slotIndex % 2 === 0) ? -1 : 1;
-
-            bot.cutTimer = (bot.cutTimer ?? 1.5) - dt;
-            if (bot.cutTimer <= 0 || !bot.targetOffBallSpot) {
-                if (bot.offBallPhase === 'PERIMETER') {
-                    // Appel de balle tranchant vers le panier (Backdoor / Basket Cut) !
-                    bot.offBallPhase = 'CUT_BASKET';
-                    bot.targetOffBallSpot = new THREE.Vector3(
-                        sideSign * (1.1 + Math.random() * 1.1),
-                        0,
-                        hoop.rimPos.z + dirZ * (1.1 + Math.random() * 0.9)
-                    );
-                    bot.cutTimer = 2.4 + Math.random() * 1.2;
-                } else if (bot.offBallPhase === 'CUT_BASKET') {
-                    // Ressortir derrière l'arc à 3 points (> 5.55m) pour ouvrir l'espace (Pop Out)
-                    bot.offBallPhase = 'POP_OUT';
-                    const isCorner = Math.random() < 0.5;
-                    bot.targetOffBallSpot = new THREE.Vector3(
-                        sideSign * (isCorner ? 5.8 : 4.4),
-                        0,
-                        hoop.rimPos.z + dirZ * (isCorner ? 1.8 : 4.9)
-                    );
-                    bot.cutTimer = 2.6 + Math.random() * 1.4;
-                } else {
-                    // Déplacement latéral en tête de raquette ou à 45° pour proposer une ligne de passe propre
-                    bot.offBallPhase = 'PERIMETER';
-                    bot.targetOffBallSpot = new THREE.Vector3(
-                        sideSign * (2.6 + Math.random() * 2.4),
-                        0,
-                        hoop.rimPos.z + dirZ * (3.6 + Math.random() * 2.2)
-                    );
-                    bot.cutTimer = 2.2 + Math.random() * 1.2;
-                }
+            // COUPES : chacun tient sa place écartée autour de l'arc, un seul coupeur à la fois vers le cercle
+            // (places et coupeur choisis pour toute l'équipe : Tactics.js, updateMotion)
+            const m = this.motion;
+            const cutting = m?.cutterId === bot.id;
+            let target = m?.spots.get(bot.id);
+            if (cutting) {
+                const side = Math.sign(bot.pos.x - hoop.rimPos.x) || 1;
+                const out = hoop.side === 'NORTH' ? 1 : -1;
+                target = _target.set(hoop.rimPos.x + side * 1.1, 0, hoop.rimPos.z + out * 1.0);
             }
-
-            const moveSpeed = bot.offBallPhase === 'CUT_BASKET' ? botSpeed * 1.18 : botSpeed * 0.98;
-            const d = this.moveEntityTowards(bot, bot.targetOffBallSpot, moveSpeed, dt);
+            bot.offBallPhase = cutting ? 'CUT_BASKET' : 'PERIMETER';
+            const d = target ? this.moveEntityTowards(bot, target, botSpeed * (cutting ? 1.18 : 0.95), dt) : 0;
+            if (cutting && d < 0.5) m.cutLeft = Math.min(m.cutLeft, 0.5); // sous le cercle : il ressort bientôt
 
             if (d <= 0.45) {
                 const carrier = this.ball.holderId ? this.entities.get(this.ball.holderId) : null;
@@ -235,8 +210,16 @@ export const BotAIMethods = {
             bot.plan.age = (bot.plan.age || 0) + dt;
         }
 
+        // Contre-attaque : au plus un défenseur replié entre lui et le panier, il fonce (et finit s'il arrive seul)
+        if (dist > 8.5 && bot.plan?.kind !== 'DRIVE') {
+            let back = 0;
+            for (const o of this.entities.values()) {
+                if (o.team !== bot.team && this.getHorizontalDist(o.pos, rim) < dist - 1) back++;
+            }
+            if (back <= 1) bot.plan = { kind: 'DRIVE', timer: 4 };
+        }
         // Remontée du ballon (tout-terrain) : il avance vers le panier adverse ; pris à deux, il cherche une passe
-        if (dist > 8.5) {
+        if (dist > 8.5 && bot.plan?.kind !== 'DRIVE') {
             if (!(bot.plan?.timer > 0)) {
                 bot.plan = { kind: 'HOLD', timer: 0.5 };
                 const mate = this.calculateContestFactor(bot) > 0.5 ? this.bestPassTarget(bot, hoop, isTeammateOfHuman) : null;
@@ -284,9 +267,15 @@ export const BotAIMethods = {
             bot.plan = { kind: 'HOLD', timer: 0.15 };
         }
 
-        // Garder le ballon face au panier ; collé par son défenseur, il recule pour se donner de l'air
-        if (dist < 7.5 && this.calculateContestFactor(bot) > 0.6) {
-            this.moveEntityTowards(bot, _target.copy(bot.pos).addScaledVector(toRim, -1.5), speed * 0.45, dt);
+        // Garder le ballon face au panier ; collé par son défenseur, il recule pour se donner de l'air ; sinon il
+        // reste vivant : un petit dribble de côté, aller puis retour
+        if (bot.plan?.backOut || (dist < 7.5 && this.calculateContestFactor(bot) > 0.6)) {
+            this.moveEntityTowards(bot, _target.copy(bot.pos).addScaledVector(toRim, -1.5), speed * (bot.plan?.backOut ? 0.6 : 0.45), dt);
+        } else if (bot.plan?.kind === 'HOLD') {
+            const p = bot.plan;
+            p.jab = p.jab || (Math.random() < 0.5 ? 1 : -1);
+            const right = _right.set(toRim.z, 0, -toRim.x);
+            this.moveEntityTowards(bot, _target.copy(bot.pos).addScaledVector(right, p.jab * (p.age > 0.35 ? -1 : 1)), 1.1, dt);
         }
         bot.rotY = Math.atan2(toRim.x, toRim.z);
         bot.state = 'DRIBBLE';

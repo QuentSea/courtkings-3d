@@ -216,7 +216,6 @@ export const ScreenMethods = {
             bot.pnr = null;
             this.endScreen(bot);
             bot.offBallPhase = 'PERIMETER';
-            bot.cutTimer = 0.6;
             return false;
         };
         if (this.matchRules.possessionTeam !== bot.team || !handler) return stop();

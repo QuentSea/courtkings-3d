@@ -121,8 +121,13 @@ export const MoveMethods = {
         const euro = 2 * this.finishChance(bot, contest * 0.5) * noise();
         const floater = dist > 2.3 ? 2 * this.floaterChance(bot, contest) * noise() : 0;
         const kick = pass ? pass.value * 0.9 * noise() : 0;
-        if (kick > euro && kick > floater) this.botPass(bot, pass.ent);
-        else if (floater > euro) this.botFloater(bot, hoop);
+        // Ressortir en dribblant pour relancer l'attaque : de moins en moins quand le chrono de tir baisse
+        const clock = this.matchRules.shotClock ?? 24;
+        const reset = contest > 0.5 ? (1.25 - Math.max(0, 12 - clock) * 0.1) * noise() : 0;
+        const best = Math.max(euro, floater, kick, reset);
+        if (best === kick) this.botPass(bot, pass.ent);
+        else if (best === reset) bot.plan = { kind: 'HOLD', timer: 0.7, backOut: true };
+        else if (best === floater) this.botFloater(bot, hoop);
         // Euro step du côté où le défenseur n'est pas (euro = 1 : pas vers sa gauche)
         else this.startBotFinish(bot, hoop, dist, { open: false, euro: blocker.lat >= 0 ? 1 : -1 });
     },

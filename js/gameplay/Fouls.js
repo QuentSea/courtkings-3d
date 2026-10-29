@@ -121,7 +121,9 @@ export const FoulMethods = {
         const out = hoop.side === 'NORTH' ? 1 : -1;
         const rim = hoop.rimPos;
         // Le long de la raquette : la défense au plus près du cercle, l'attaque ensuite, les autres derrière
-        const lane = [[-1.9, 1.2], [1.9, 1.2], [-1.9, 2.3], [1.9, 2.3], [-1.9, 3.4], [1.9, 3.4]];
+        // (une place chacun : deux joueurs au même endroit ne peuvent plus être écartés)
+        const lane = [[-1.9, 1.2], [1.9, 1.2], [-1.9, 2.3], [1.9, 2.3], [-1.9, 3.4], [1.9, 3.4],
+            [-3.6, FT_DISTANCE + 2.2], [3.6, FT_DISTANCE + 2.2], [-1.4, FT_DISTANCE + 3.0], [1.4, FT_DISTANCE + 3.0]];
         const others = [...this.entities.values()].filter(e => e.id !== ft.shooterId)
             .sort((a, b) => (a.team === ft.team) - (b.team === ft.team));
         const shooter = this.entities.get(ft.shooterId);
@@ -141,10 +143,7 @@ export const FoulMethods = {
             ent.rotY = Math.atan2(rim.x - ent.pos.x, rim.z - ent.pos.z);
         };
         place(shooter, 0, FT_DISTANCE);
-        others.forEach((ent, i) => {
-            if (i < lane.length) place(ent, lane[i][0], lane[i][1]);
-            else place(ent, i % 2 ? 3.6 : -3.6, FT_DISTANCE + 2.2);
-        });
+        others.forEach((ent, i) => place(ent, lane[i % lane.length][0], lane[i % lane.length][1]));
 
         if (this.isAuthority) r.checkBallSeq++;
         this.inCheckBall = true;

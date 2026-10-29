@@ -338,6 +338,22 @@
     mi-distance, attaques de 8,5 s au lieu de 4,7 s, points marqués proches d'avant. 3v3 : 54 % à 3 points.
   - Mesures faites dans le navigateur (match simulé image par image, minuteurs du jeu en temps simulé) ; pas de test
     `node --test` : BotAI.js et Moves.js chargent Three.js.
+- **Revue de ce qu'on voit** (29 octobre 2026, « améliore ce qui a à améliorer ») — trouvé en simulant des matchs :
+  - Bras levés en pleine course (4,6 % du temps des joueurs) : le geste « enfermé au rebond » (`info.boxed`) et la
+    posture de box-out ne s'appliquent plus qu'à moins de 2 m/s (`gesturePose`, `applyProcedural`).
+  - Lancers francs en 5v5 : deux coéquipiers placés exactement au même endroit, et la collision ne savait pas les
+    écarter (pas de direction) ; 10 places distinctes (`setupFreeThrow`) et écartement de côté si distance nulle
+    (`resolvePlayerCollisions`).
+  - Attaque serrée (4,5 m en moyenne entre attaquants, deux par deux du même côté, coupes en même temps) :
+    attaque « coupes » et pick and roll = places écartées `MOTION_SPOTS` (coins, ailes, haut) tenues par chacun, le
+    porteur et les humains gardent la plus proche d'eux, le plus mauvais tireur de loin attend au « dunker spot »
+    côté opposé au ballon, un seul coupeur à la fois (`updateMotion` / `assignMotionSpots`, Tactics.js, appelé par
+    `updateTactics(dt)`). Écart moyen 5,9 m. Anciens champs `cutTimer` / `targetOffBallSpot` supprimés.
+  - Porteur figé pendant qu'il réfléchit : petit dribble de côté, aller-retour (`plan.jab`).
+  - Près du cercle, défenseur devant et contestation forte : il peut ressortir en dribblant (`plan.backOut`,
+    `botFinish`) au lieu de forcer ; contre-attaque (au plus un défenseur replié) : il fonce (`plan` DRIVE).
+  - Mesuré ensuite (5v5) : 43 % au cercle dont 2 dunks, 39 % à 3 points, 18 % mi-distance ; 3v3 : euro steps face à
+    un défenseur 6 sur 11 au lieu de 17 sur 18.
 - **Menu caché pendant le match et pause** (29 octobre 2026, demandé par le joueur) : sur l'écran du match
   (`body.in-match`, posé par `switchScreen`), la barre de navigation, la barre d'outils du match et le bandeau des
   touches (`#controls-legend`) sont cachés ;

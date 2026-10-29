@@ -26,6 +26,10 @@ const ZONES = {
 };
 // Isolation et jeu au poste : les autres attaquants dans les coins et sur les ailes
 const SPACING_SPOTS = [[-5.8, 1.8], [5.8, 1.8], [-4.6, 5.0], [4.6, 5.0]];
+// Coupes et pick and roll : places écartées derrière l'arc (coins, ailes, haut) ; « dunker » = près du cercle au ras
+// de la ligne de fond, pour un intérieur qui ne tire pas de loin
+const MOTION_SPOTS = [[-5.9, 1.0], [5.9, 1.0], [-4.6, 4.4], [4.6, 4.4], [0, 6.4]];
+const DUNKER_SPOT = [2.6, 0.7];
 
 const otherTeam = (team) => (team === 'A' ? 'B' : 'A');
 
@@ -36,6 +40,7 @@ export const TacticMethods = {
         r.plays = { A: 'MOTION', B: 'MOTION' };
         this.scoreMemory = { A: [], B: [] };
         this.lastTacticsText = null;
+        this.motion = null;
     },
 
     /** Panier marqué (hôte) : l'IA défensive adverse s'en souvient */
@@ -45,13 +50,90 @@ export const TacticMethods = {
         if (mem.length > 3) mem.shift();
     },
 
-    /** Hôte, à chaque image : défense en place pour chaque équipe */
-    updateTactics() {
+    /** Hôte, à chaque image : défense en place pour chaque équipe, places et coupeur de l'attaque */
+    updateTactics(dt = 0) {
         if (!this.isAuthority) return;
         const r = this.matchRules;
         for (const team of ['A', 'B']) {
             const pick = r.tactics[team].def;
             r.defenseNow[team] = pick !== 'AUTO' ? pick : this.autoDefense(team);
+        }
+        this.updateMotion(dt);
+    },
+
+    /**
+     * Attaque « coupes » et pick and roll (hôte) : chaque bot sans ballon a une place écartée (mise à jour toutes les
+     * 0,5 s : le porteur garde la plus proche de lui, les autres se replacent) ; un seul coéquipier à la fois coupe
+     * vers le cercle (toutes les 2,5 à 4,5 s quand le porteur est près du panier), puis reprend sa place
+     */
+    updateMotion(dt) {
+        const team = this.matchRules.possessionTeam;
+        const holder = this.ball.state === 'HELD' ? this.entities.get(this.ball.holderId) : null;
+        const m = this.motion || (this.motion = { team: null, spots: new Map(), refresh: 0, cutterId: null, cutTimer: 0, cutLeft: 0 });
+        if (m.team !== team) {
+            Object.assign(m, { team, refresh: 0, cutterId: null, cutTimer: 2 + Math.random() * 2 });
+            m.spots.clear();
+        }
+        m.refresh -= dt;
+        if (m.refresh <= 0) {
+            m.refresh = 0.5;
+            this.assignMotionSpots(team, holder);
+        }
+        if (m.cutterId) {
+            m.cutLeft -= dt;
+            if (m.cutLeft <= 0) m.cutterId = null;
+            return;
+        }
+        const rim = this.getAttackingHoopForTeam(team).rimPos;
+        if (!holder || holder.team !== team || this.getHorizontalDist(holder.pos, rim) > 8) return;
+        m.cutTimer -= dt;
+        if (m.cutTimer > 0) return;
+        m.cutTimer = 2.5 + Math.random() * 2;
+        const candidates = [...m.spots.keys()].filter(id => id !== m.bigId);
+        if (!candidates.length) return;
+        m.cutterId = candidates[Math.floor(Math.random() * candidates.length)];
+        m.cutLeft = 2.2;
+    },
+
+    /** Places de l'attaque « coupes » (voir updateMotion) */
+    assignMotionSpots(team, holder) {
+        const m = this.motion;
+        const hoop = this.getAttackingHoopForTeam(team);
+        const rim = hoop.rimPos;
+        const out = hoop.side === 'NORTH' ? 1 : -1;
+        const world = ([x, z]) => new THREE.Vector3(rim.x + x, 0, rim.z + out * z);
+        const nearest = (list, pos) => {
+            let best = -1;
+            list.forEach((s, i) => { if (best < 0 || s.distanceTo(pos) < list[best].distanceTo(pos)) best = i; });
+            return best;
+        };
+        const free = MOTION_SPOTS.map(world);
+        const mates = [...this.entities.values()].filter(e => e.team === team);
+        // Le porteur et les joueurs humains gardent la place la plus proche d'eux
+        for (const e of mates) {
+            if (e.isBot && e !== holder) continue;
+            const i = nearest(free, e.pos);
+            if (i >= 0) free.splice(i, 1);
+        }
+        const bots = mates.filter(e => e.isBot && e !== holder && !e.pnr).sort((a, b) => a.slotIndex - b.slotIndex);
+        const shooting = (e) => e.profile.attributes?.shooting || 70;
+        // Le plus mauvais tireur de loin (s'il tire mal) attend près du cercle, côté opposé au ballon
+        const big = bots.filter(e => shooting(e) < 72).sort((a, b) => shooting(a) - shooting(b))[0];
+        const prev = m.spots;
+        m.spots = new Map();
+        m.bigId = big?.id;
+        if (big) {
+            const ballSide = (holder?.pos.x ?? rim.x) > rim.x ? 1 : -1;
+            m.spots.set(big.id, world([-ballSide * DUNKER_SPOT[0], DUNKER_SPOT[1]]));
+        }
+        for (const b of bots) {
+            if (b === big || !free.length) continue;
+            // Il garde sa place si elle est encore libre, sinon il prend la plus proche
+            const old = prev.get(b.id);
+            let i = old ? free.findIndex(s => s.distanceTo(old) < 0.5) : -1;
+            if (i < 0) i = nearest(free, b.pos);
+            m.spots.set(b.id, free[i]);
+            free.splice(i, 1);
         }
     },
 

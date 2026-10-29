@@ -519,10 +519,12 @@ export class AnimatedCharacter {
         if (state === 'DUNK') {
             return { arms: shooting([v(0.1, 1, 0.25), v(0, 1, 0.15)], [v(0.7, 0.3, 0.4), v(0.4, 0.4, 0.6)]) };
         }
-        if (state === 'CONTEST' || info.boxed) {
+        // Enfermé au rebond ou en box-out : seulement au contact, presque à l'arrêt (pas en pleine course)
+        const holding = this.speed < 2;
+        if (state === 'CONTEST' || (info.boxed && holding)) {
             return { arms: both([v(0.15, 1, 0.2), v(0.05, 1, 0.1)]) };
         }
-        if (info.boxOut) return { arms: both([v(1, 0.25, -0.15), v(0.45, 0.8, 0.3)]) }; // coudes écartés, dos à l'adversaire
+        if (info.boxOut && holding) return { arms: both([v(1, 0.25, -0.15), v(0.45, 0.8, 0.3)]) }; // coudes écartés, dos à l'adversaire
         if (state === 'SCREEN') {
             // Bras croisés contre la poitrine (écran réglementaire)
             return { arms: { plusX: [v(0.3, -0.75, 0.55), v(-0.95, 0.2, 0.3)], minusX: [v(-0.3, -0.7, 0.55), v(0.95, 0.25, 0.3)] } };
@@ -560,7 +562,7 @@ export class AnimatedCharacter {
             if (state === 'CROSSOVER') { dip = 0.13; lean = this.dribbleHand === 'RIGHT' ? 0.16 : -0.16; }
             if (state === 'SHOOT') { dip = 0.14; pitch = 0.04; } // armé du tir (avant le saut)
             if (state === 'DEFENSE' || this.lateral) dip = Math.max(dip, 0.08);
-            if (info.boxOut) { dip = 0.15; pitch = 0.25; }
+            if (info.boxOut && this.speed < 2) { dip = 0.15; pitch = 0.25; }
             if (this.landTimer > 0) dip = Math.max(dip, 0.15 * Math.sin(Math.PI * this.landTimer / LAND_TIME));
             lean += THREE.MathUtils.clamp(this.turnRate * this.speed * 0.01, -0.18, 0.18); // dans les virages
         }

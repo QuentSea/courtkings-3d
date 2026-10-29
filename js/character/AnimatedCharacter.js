@@ -2,9 +2,13 @@
  * AnimatedCharacter.js
  * Personnage animé (corps Quaternius CC0) avec la même interface que l'ancien CharacterMesh :
  * root, selectionRing, dribbleHand, animTime, updateAnimation(dt, état), updateConfig(config).
- * - Animations du pack (repos, course, sprint, saut, posture basse) avec fondus entre elles
- * - Gestes de basket par-dessus : les bras sont orientés vers une direction voulue (dribble, tir,
- *   dunk, contre, défense) en partant de la pose animée
+ * - Animations du pack (repos, course, sprint, saut, posture basse, danse) avec fondus entre elles ;
+ *   jouées à l'envers pour reculer, remplacées par des pas chassés quand le joueur se déplace de côté
+ * - Par-dessus, en procédural (applyProcedural) : bassin qui descend avec les pieds qui restent au sol
+ *   (IK des jambes : flexion avant le tir, réception de saut, posture de défense, box-out), buste penché
+ *   (sprint, dribble, virages, faute subie), main de dribble qui suit le ballon (IK du bras), gestes en
+ *   plusieurs temps (tir : armé, mise en place, poignet cassé ; lay-up : genou levé ; dunk : bras armé puis
+ *   smash), réactions (faute, célébration, défaite) ; danse des vainqueurs
  * - Tenue découpée dans le corps (CharacterAssets) : maillot avec numéro, short, chaussettes, chaussures
  */
 
@@ -36,11 +40,20 @@ const CLIPS = {
     sprint: 'Sprint_Loop',
     crouchIdle: 'Crouch_Idle_Loop',
     crouchMove: 'Crouch_Fwd_Loop',
-    air: 'Jump_Loop'
+    air: 'Jump_Loop',
+    dance: 'Dance_Loop'
 };
 const LOCOMOTION = new Set(['jog', 'sprint', 'crouchMove']);
 // Part de l'accroupi du pack dans la posture de défense (1 = accroupi complet, trop bas)
 const DEFENSE_CROUCH = 0.3;
+const LAND_TIME = 0.28;      // amorti des genoux à la réception d'un saut (s)
+const SHUFFLE_STRIDE = 0.7;  // distance parcourue par cycle de pas chassés (m)
+const NO_INFO = {};
+
+/** Hauteur du ballon dribblé (Ball.js place le ballon, la main de dribble le suit) */
+export function dribbleBallHeight(animTime) {
+    return Math.abs(Math.sin(animTime * 1.6)) * 0.74 + 0.16;
+}
 
 export class AnimatedCharacter {
     constructor(config = {}) {
@@ -68,9 +81,21 @@ export class AnimatedCharacter {
         this.animTime = 0;
 
         this.speed = 0;
+        this.fwdSpeed = 0;      // vitesse vers l'avant du joueur (négative : il recule)
+        this.latSpeed = 0;      // vitesse de côté (+X)
+        this.turnRate = 0;      // vitesse de rotation (rad/s), pour pencher dans les virages
         this.lastPos = null;
-        this.overlayWeight = 0;
-        this.overlayDirs = null;
+        this.lastYaw = 0;
+        this.lateral = false;
+        this.shufflePhase = 0;
+        this.shuffleW = 0;
+        this.landTimer = 0;
+        this.wasAirborne = false;
+        this.pose = { dip: 0, pitch: 0, lean: 0 };
+        this.armW = { plusX: 0, minusX: 0 };
+        this.armDirs = { plusX: null, minusX: null };
+        this.legW = 0;
+        this.legDirs = null;
         this.disposables = [];
 
         this.buildMesh();
@@ -181,6 +206,12 @@ export class AnimatedCharacter {
             plusX: { upper: this.bones[`upperarm_${side}`], lower: this.bones[`lowerarm_${side}`], hand: this.bones[`hand_${side}`] },
             minusX: { upper: this.bones[`upperarm_${other}`], lower: this.bones[`lowerarm_${other}`], hand: this.bones[`hand_${other}`] }
         };
+        // Même côté pour les jambes (bras gauche et jambe gauche)
+        this.legs = {
+            plusX: { thigh: this.bones[`thigh_${side}`], calf: this.bones[`calf_${side}`], foot: this.bones[`foot_${side}`] },
+            minusX: { thigh: this.bones[`thigh_${other}`], calf: this.bones[`calf_${other}`], foot: this.bones[`foot_${other}`] }
+        };
+        this.spine = ['spine_01', 'spine_02', 'spine_03'].map(n => this.bones[n]).filter(Boolean);
     }
 
     attachHairAndBeard(body, accentColor) {
@@ -336,99 +367,293 @@ export class AnimatedCharacter {
     }
 
     /**
-     * Choisit l'animation selon l'état et la vitesse réelle, puis ajoute les gestes de basket
+     * Choisit l'animation selon l'état et le déplacement réel, puis ajoute les gestes de basket.
+     * info (facultatif, donné par le moteur du match) : hasBall, finish ('DUNK' / 'LAYUP') et finishT (0 à 1),
+     * release (secondes depuis le départ de son tir, -1 sinon), boxOut, boxed, react ('FOULED' / 'CELEBRATE'),
+     * matchEnd ('WIN' / 'LOSE')
      */
-    updateAnimation(dt, state = this.animState) {
+    updateAnimation(dt, state = this.animState, info = NO_INFO) {
         this.animState = state;
         const dribbleScore = this.config.attributes?.dribble || 75;
         const dribbleSpeedMultiplier = 0.8 + (dribbleScore / 99) * 0.75;
-        this.animTime += dt * 7 * dribbleSpeedMultiplier; // même rythme que l'ancien modèle (ballon synchronisé)
 
-        // Vitesse au sol mesurée d'une image à l'autre (marche aussi pour les joueurs distants et les bots)
+        // Déplacement mesuré d'une image à l'autre (marche aussi pour les joueurs distants et les bots),
+        // décomposé selon l'orientation du joueur : avancer, reculer, aller de côté, tourner
         const p = this.root.position;
+        const yaw = this.root.rotation.y;
         if (this.lastPos && dt > 0) {
-            const raw = Math.hypot(p.x - this.lastPos.x, p.z - this.lastPos.z) / dt;
-            this.speed += (Math.min(raw, 12) - this.speed) * Math.min(1, dt * 10);
+            let vx = (p.x - this.lastPos.x) / dt;
+            let vz = (p.z - this.lastPos.z) / dt;
+            if (Math.hypot(vx, vz) > 15) vx = vz = 0; // remise en jeu : téléportation, pas une course
+            const k = Math.min(1, dt * 10);
+            this.speed += (Math.hypot(vx, vz) - this.speed) * k;
+            this.fwdSpeed += (vx * Math.sin(yaw) + vz * Math.cos(yaw) - this.fwdSpeed) * k;
+            this.latSpeed += (vx * Math.cos(yaw) - vz * Math.sin(yaw) - this.latSpeed) * k;
+            const dYaw = Math.atan2(Math.sin(yaw - this.lastYaw), Math.cos(yaw - this.lastYaw));
+            this.turnRate += (THREE.MathUtils.clamp(dYaw / dt, -12, 12) - this.turnRate) * k;
         }
         this.lastPos = { x: p.x, z: p.z };
-        const moving = this.speed > 0.6;
+        this.lastYaw = yaw;
+        // Rythme du dribble : plus rapide en courant (le ballon suit le même temps, Ball.js)
+        this.animTime += dt * 7 * dribbleSpeedMultiplier * (1 + Math.min(this.speed, 7) * 0.05);
 
+        const airborne = p.y > 0.05;
+        const moving = this.speed > 0.6;
+        const dribbling = state === 'DRIBBLE' || state === 'CROSSOVER';
+        // De côté (défenseur face à son joueur) : pas chassés ; vers l'arrière : animation jouée à l'envers
+        this.lateral = moving && !airborne && !dribbling && Math.abs(this.latSpeed) > Math.abs(this.fwdSpeed) * 1.2;
+        const backward = moving && !this.lateral && this.fwdSpeed < -0.4 * this.speed;
+        if (this.lateral) this.shufflePhase = (this.shufflePhase + Math.abs(this.latSpeed) * dt / SHUFFLE_STRIDE) % 1;
+
+        const low = state === 'DEFENSE' || info.boxOut ? DEFENSE_CROUCH : 0.12;
         let key = moving ? 'jog' : 'idle';
         if (state === 'RUN') key = this.speed > 5.2 ? 'sprint' : 'jog';
-        else if (state === 'SHOOT' || state === 'CONTEST' || state === 'DUNK') key = 'air';
-        if (state === 'DEFENSE') {
+        if (info.matchEnd === 'WIN' && this.actions.dance) {
+            this.playAction('dance', 0.4);
+        } else if (airborne || state === 'CONTEST' || state === 'DUNK') {
+            this.playAction('air', 0.1);
+        } else if (this.lateral) {
+            this.playBlend({ crouchIdle: low, idle: 1 - low }, 0.2);
+        } else if (state === 'DEFENSE' || info.boxOut) {
             // Posture de défense : l'accroupi du pack mélangé avec la pose debout (genoux fléchis, dos droit)
-            this.playBlend(moving ? { crouchMove: DEFENSE_CROUCH, jog: 1 - DEFENSE_CROUCH }
-                : { crouchIdle: DEFENSE_CROUCH, idle: 1 - DEFENSE_CROUCH }, 0.2);
+            this.playBlend(moving ? { crouchMove: low, jog: 1 - low } : { crouchIdle: low, idle: 1 - low }, 0.2);
         } else if (state === 'SCREEN') {
             // Écran : appuis larges, un peu fléchi, immobile
             this.playBlend({ crouchIdle: 0.2, idle: 0.8 }, 0.15);
         } else {
-            this.playAction(key, key === 'air' ? 0.1 : 0.2);
+            this.playAction(key, 0.2);
         }
 
+        const dir = backward ? -1 : 1;
         for (const [k, action] of Object.entries(this.actions)) {
             const ref = k === 'sprint' ? 6.5 : k === 'jog' || k === 'crouchMove' ? 3.6 : 0;
-            action.timeScale = ref ? THREE.MathUtils.clamp(this.speed / ref, 0.6, 1.6) : 1;
+            action.timeScale = ref ? dir * THREE.MathUtils.clamp(this.speed / ref, 0.6, 1.6) : 1;
         }
         this.blendActions(dt);
         this.mixer.update(dt);
 
-        this.applyBasketballGestures(dt, state);
+        this.applyProcedural(dt, state, info, airborne);
     }
 
     /**
-     * Directions voulues des bras (repère du personnage : +Y haut, +Z devant, +X côté « droit » du jeu)
+     * Gestes des bras (repère du personnage : +Y haut, +Z devant, +X côté « droit » du jeu), en plusieurs temps.
+     * Renvoie { arms: { plusX: [haut du bras, avant-bras], minusX: ... }, dribble: côté de la main qui dribble,
+     * flick: poignet cassé (fin de tir), legs: pose des jambes en l'air }
      */
-    gestureDirections(state) {
+    gesturePose(state, info, airborne) {
         const v = (x, y, z) => new THREE.Vector3(x, y, z).normalize();
-        const b = Math.abs(Math.sin(this.animTime * 1.6)); // 1 = ballon dans la main, 0 = ballon au sol
-        const dribbling = state === 'DRIBBLE' || state === 'CROSSOVER';
-        if (dribbling) {
-            const sway = state === 'CROSSOVER' ? Math.sin(this.animTime * 2.5) : 0;
-            const handSide = state === 'CROSSOVER' ? (sway >= 0 ? 'plusX' : 'minusX') : (this.dribbleHand === 'RIGHT' ? 'plusX' : 'minusX');
-            const s = handSide === 'plusX' ? 1 : -1;
-            const guard = handSide === 'plusX' ? 'minusX' : 'plusX';
-            return {
-                [handSide]: [v(0.35 * s, -1, 0.3), v(0.15 * s, -0.55 - 0.45 * (1 - b), 0.55)],
-                [guard]: [v(-0.4 * s, -0.8, 0.45), v(-0.1 * s, -0.15, 1)]
-            };
+        const mirror = (pair) => pair.map(d => new THREE.Vector3(-d.x, d.y, d.z));
+        // Main de tir : celle du dribble (droite par défaut)
+        const shootSide = this.dribbleHand === 'LEFT' ? 'minusX' : 'plusX';
+        const guideSide = shootSide === 'plusX' ? 'minusX' : 'plusX';
+        const both = (pair) => ({ plusX: pair, minusX: mirror(pair) });
+        const shooting = (shootPair, guidePair) => {
+            const m = shootSide === 'plusX' ? (x) => x : mirror;
+            return { [shootSide]: m(shootPair), [guideSide]: m(guidePair) };
+        };
+
+        if (info.matchEnd === 'WIN' && this.actions.dance) return null; // la danse fait tout
+        if (info.matchEnd === 'LOSE') return { arms: both([v(0.6, -0.7, -0.2), v(-0.6, -0.45, 0.35)]) }; // mains sur les hanches
+        if (info.react === 'FOULED') return { arms: both([v(0.9, 0.2, -0.3), v(0.6, 0.65, -0.2)]) };
+
+        if (info.finish === 'DUNK') {
+            const t = info.finishT || 0;
+            const legs = both([v(0.12, -0.35, 1), v(0, -0.55, -0.85)]); // genoux repliés
+            if (!info.hasBall) return { arms: both([v(0.15, 1, 0.35), v(0.05, 1, 0.3)]), legs }; // alley-oop : mains tendues vers le ballon
+            if (t < 0.6) return { arms: shooting([v(0.25, 0.85, -0.45), v(0.1, 0.5, -0.85)], [v(0.6, 0.4, 0.5), v(0.3, 0.5, 0.8)]), legs };
+            return { arms: shooting([v(0.05, 0.8, 0.6), v(0, -0.25, 1)], [v(0.6, 0.2, 0.4), v(0.3, 0.2, 0.9)]), legs };
+        }
+        if (info.finish === 'LAYUP') {
+            const t = info.finishT || 0;
+            // Appel sur un pied : genou opposé à la main de tir levé, l'autre jambe en arrière
+            const raised = [v(0, -0.1, 1), v(0, -1, 0.1)];
+            const trail = [v(0, -1, -0.3), v(0, -0.7, -0.7)];
+            const legs = { [guideSide]: raised, [shootSide]: trail };
+            if (t < 0.45) return { arms: both([v(0.35, -0.35, 0.85), v(-0.3, 0.55, 0.75)]), legs }; // ballon protégé contre la poitrine
+            return { arms: shooting([v(0.15, 1, 0.55), v(0.05, 0.95, 0.6)], [v(0.5, 0.5, 0.55), v(0.3, 0.6, 0.7)]), legs };
+        }
+        if (info.release >= 0 && info.release < 0.9) {
+            // Fin du tir : bras tendu vers le cercle, poignet cassé (« col de cygne »), main guide sur le côté
+            return { arms: shooting([v(0.08, 1, 0.45), v(0.02, 0.85, 0.55)], [v(0.35, 0.95, 0.35), v(0.25, 1, 0.15)]), flick: 1.2 };
         }
         if (state === 'SHOOT') {
-            return { plusX: [v(0.1, 1, 0.45), v(0, 1, 0.55)], minusX: [v(-0.2, 1, 0.55), v(0.25, 0.9, 0.3)] };
+            if (!airborne) return { arms: both([v(0.3, -0.4, 0.85), v(-0.2, 0.6, 0.75)]) }; // armé : ballon devant la poitrine
+            // En l'air : ballon au-dessus du front (mise en place), la détente vient au lâcher
+            return { arms: shooting([v(0.2, 0.55, 0.8), v(0, 1, 0.15)], [v(0.35, 0.6, 0.7), v(-0.25, 0.85, 0.3)]) };
+        }
+        if (info.react === 'CELEBRATE' && !airborne) {
+            const pump = Math.abs(Math.sin(this.animTime * 0.9));
+            return { arms: { [shootSide]: shooting([v(0.45, 0.55, 0.35), v(0.05, 0.4 + pump, 0.1)], [])[shootSide] } }; // poing levé
         }
         if (state === 'DUNK') {
-            return { plusX: [v(0.1, 1, 0.25), v(0, 1, 0.15)], minusX: [v(-0.7, 0.3, 0.4), v(-0.4, 0.4, 0.6)] };
+            return { arms: shooting([v(0.1, 1, 0.25), v(0, 1, 0.15)], [v(0.7, 0.3, 0.4), v(0.4, 0.4, 0.6)]) };
         }
-        if (state === 'CONTEST') {
-            return { plusX: [v(0.15, 1, 0.2), v(0.05, 1, 0.1)], minusX: [v(-0.15, 1, 0.2), v(-0.05, 1, 0.1)] };
+        if (state === 'CONTEST' || info.boxed) {
+            return { arms: both([v(0.15, 1, 0.2), v(0.05, 1, 0.1)]) };
         }
+        if (info.boxOut) return { arms: both([v(1, 0.25, -0.15), v(0.45, 0.8, 0.3)]) }; // coudes écartés, dos à l'adversaire
         if (state === 'SCREEN') {
             // Bras croisés contre la poitrine (écran réglementaire)
-            return { plusX: [v(0.3, -0.75, 0.55), v(-0.95, 0.2, 0.3)], minusX: [v(-0.3, -0.7, 0.55), v(0.95, 0.25, 0.3)] };
+            return { arms: { plusX: [v(0.3, -0.75, 0.55), v(-0.95, 0.2, 0.3)], minusX: [v(-0.3, -0.7, 0.55), v(0.95, 0.25, 0.3)] } };
+        }
+        if (state === 'DRIBBLE' || state === 'CROSSOVER') {
+            // Main de dribble sur le ballon (IK), l'autre bras protège
+            const handSide = this.dribbleHand === 'RIGHT' ? 'plusX' : 'minusX';
+            const guard = handSide === 'plusX' ? 'minusX' : 'plusX';
+            const g = [v(0.4, -0.8, 0.45), v(0.1, -0.15, 1)];
+            return { arms: { [guard]: handSide === 'plusX' ? mirror(g) : g }, dribble: handSide };
         }
         if (state === 'DEFENSE') {
             // Une main haute (contre le tir), une main basse et écartée (contre le dribble)
-            return { plusX: [v(1, 0.05, 0.3), v(0.75, 0.6, 0.35)], minusX: [v(-1, -0.4, 0.35), v(-0.85, -0.25, 0.6)] };
+            return { arms: { plusX: [v(1, 0.05, 0.3), v(0.75, 0.6, 0.35)], minusX: [v(-1, -0.4, 0.35), v(-0.85, -0.25, 0.6)] } };
         }
         return null;
     }
 
-    applyBasketballGestures(dt, state) {
-        const dirs = this.gestureDirections(state);
-        if (dirs) this.overlayDirs = dirs;
-        const target = dirs ? 1 : 0;
-        this.overlayWeight += (target - this.overlayWeight) * Math.min(1, dt * 14);
-        if (this.overlayWeight < 0.01 || !this.overlayDirs) return;
+    applyProcedural(dt, state, info, airborne) {
+        const scale = this.bodyGroup.scale.y;
+        if (this.wasAirborne && !airborne) this.landTimer = LAND_TIME;
+        this.wasAirborne = airborne;
+        this.landTimer = Math.max(0, this.landTimer - dt);
+        const dribbling = state === 'DRIBBLE' || state === 'CROSSOVER';
+        const sprint = THREE.MathUtils.clamp((this.speed - 3) / 4, 0, 1);
+        const dancing = info.matchEnd === 'WIN' && !!this.actions.dance;
+
+        // 1. Cibles du corps : bassin plus bas (m), buste penché en avant (rad), penché sur le côté (+X)
+        let dip = 0;
+        let pitch = 0;
+        let lean = 0;
+        if (!airborne && !dancing) {
+            if (dribbling) { dip = 0.07; pitch = 0.1 + 0.1 * sprint; }
+            else if (state === 'RUN') pitch = 0.08 * sprint;
+            if (state === 'CROSSOVER') { dip = 0.13; lean = this.dribbleHand === 'RIGHT' ? 0.16 : -0.16; }
+            if (state === 'SHOOT') { dip = 0.14; pitch = 0.04; } // armé du tir (avant le saut)
+            if (state === 'DEFENSE' || this.lateral) dip = Math.max(dip, 0.08);
+            if (info.boxOut) { dip = 0.15; pitch = 0.25; }
+            if (this.landTimer > 0) dip = Math.max(dip, 0.15 * Math.sin(Math.PI * this.landTimer / LAND_TIME));
+            lean += THREE.MathUtils.clamp(this.turnRate * this.speed * 0.01, -0.18, 0.18); // dans les virages
+        }
+        if (info.react === 'FOULED') pitch = -0.32;
+        if (info.matchEnd === 'LOSE') pitch = 0.3;
+        const k = Math.min(1, dt * 10);
+        const pose = this.pose;
+        pose.dip += (dip - pose.dip) * k;
+        pose.pitch += (pitch - pose.pitch) * k;
+        pose.lean += (lean - pose.lean) * k;
+        this.shuffleW += ((this.lateral ? 1 : 0) - this.shuffleW) * k;
 
         this.root.updateMatrixWorld(true);
-        const charQuat = this.root.getWorldQuaternion(new THREE.Quaternion());
-        for (const [sideKey, [upperDir, lowerDir]] of Object.entries(this.overlayDirs)) {
-            const arm = this.arms[sideKey];
-            if (!arm?.upper || !arm.lower || !arm.hand) continue;
-            aimBone(arm.upper, arm.lower, upperDir.clone().applyQuaternion(charQuat), this.overlayWeight);
-            aimBone(arm.lower, arm.hand, lowerDir.clone().applyQuaternion(charQuat), this.overlayWeight);
+        const charQuat = this.root.getWorldQuaternion(_cq);
+        const fwdW = _fwd.set(0, 0, 1).applyQuaternion(charQuat);
+        const sideW = _side.set(1, 0, 0).applyQuaternion(charQuat);
+        const toWorld = (d) => d.clone().applyQuaternion(charQuat);
+
+        // 2. Jambes au sol : on retient où sont les pieds avant de descendre le bassin
+        const legsIK = !airborne && (pose.dip > 0.004 || this.shuffleW > 0.01);
+        const feet = {};
+        if (legsIK) {
+            for (const [sideKey, leg] of Object.entries(this.legs)) {
+                if (!leg.foot) continue;
+                feet[sideKey] = { pos: leg.foot.getWorldPosition(new THREE.Vector3()), quat: leg.foot.getWorldQuaternion(new THREE.Quaternion()) };
+            }
         }
+        const pelvis = this.bones.pelvis;
+        if (pose.dip > 0.004 && pelvis) {
+            const pp = pelvis.getWorldPosition(_v1);
+            pp.y -= pose.dip * scale;
+            pelvis.parent.worldToLocal(pp);
+            pelvis.position.copy(pp);
+            pelvis.updateMatrixWorld(true);
+        }
+
+        // 3. Buste : réparti sur les trois vertèbres
+        if (Math.abs(pose.pitch) > 0.002 || Math.abs(pose.lean) > 0.002) {
+            for (const bone of this.spine) {
+                rotateBoneWorld(bone, sideW, pose.pitch / this.spine.length);
+                rotateBoneWorld(bone, fwdW, -pose.lean / this.spine.length);
+            }
+        }
+
+        // 4. Jambes : pieds remis à leur place (genoux qui plient), pas chassés de côté
+        if (legsIK) {
+            const m = Math.sign(this.latSpeed) || 1; // côté où l'on va
+            const W = SHUFFLE_STRIDE / 2;
+            const stepOf = (swingStart) => {
+                let u = (this.shufflePhase - swingStart + 1) % 1;
+                if (u < 0.5) {
+                    u /= 0.5;
+                    return { d: -W / 2 + W * u * u * (3 - 2 * u), lift: 0.07 * Math.sin(Math.PI * u) };
+                }
+                return { d: W / 2 - W * (u - 0.5) / 0.5, lift: 0 };
+            };
+            for (const [sideKey, leg] of Object.entries(this.legs)) {
+                const f = feet[sideKey];
+                if (!f || !leg.thigh || !leg.calf) continue;
+                const out = sideKey === 'plusX' ? 1 : -1;
+                const target = f.pos.clone();
+                if (this.shuffleW > 0.01) {
+                    const lead = out === m;
+                    const step = stepOf(lead ? 0 : 0.5);
+                    target.addScaledVector(sideW, (m * step.d + out * 0.07) * this.shuffleW * scale);
+                    target.y += step.lift * this.shuffleW * scale;
+                }
+                const pole = _v2.copy(fwdW).addScaledVector(sideW, out * 0.25);
+                solveTwoBone(leg.thigh, leg.calf, leg.foot, target, pole, 1);
+                setWorldQuaternion(leg.foot, f.quat); // pied à plat
+            }
+        }
+
+        // 5. Gestes (bras, jambes en l'air), en douceur d'une pose à l'autre
+        const g = dancing ? null : this.gesturePose(state, info, airborne);
+        const kd = Math.min(1, dt * 16);
+        const kw = Math.min(1, dt * 14);
+        for (const sideKey of ['plusX', 'minusX']) {
+            const want = g?.arms?.[sideKey];
+            if (want) {
+                const cur = this.armDirs[sideKey];
+                if (!cur || this.armW[sideKey] < 0.02) this.armDirs[sideKey] = want.map(d => d.clone());
+                else cur.forEach((d, i) => d.lerp(want[i], kd).normalize());
+            }
+            const wTarget = want || g?.dribble === sideKey ? 1 : 0;
+            this.armW[sideKey] += (wTarget - this.armW[sideKey]) * kw;
+        }
+        if (g?.legs) this.legDirs = g.legs;
+        this.legW += ((g?.legs && airborne ? 1 : 0) - this.legW) * kw;
+
+        if (this.legW > 0.01 && this.legDirs) {
+            for (const [sideKey, [thighDir, calfDir]] of Object.entries(this.legDirs)) {
+                const leg = this.legs[sideKey];
+                if (!leg?.thigh || !leg.calf || !leg.foot) continue;
+                aimBone(leg.thigh, leg.calf, toWorld(thighDir), this.legW);
+                aimBone(leg.calf, leg.foot, toWorld(calfDir), this.legW);
+            }
+        }
+
+        for (const sideKey of ['plusX', 'minusX']) {
+            const w = this.armW[sideKey];
+            const arm = this.arms[sideKey];
+            if (w < 0.01 || !arm?.upper || !arm.lower || !arm.hand) continue;
+            if (g?.dribble === sideKey) {
+                // Poignet au-dessus du ballon quand il remonte, il l'attend à hauteur de hanche quand il est au sol
+                const out = sideKey === 'plusX' ? 1 : -1;
+                const ballY = dribbleBallHeight(this.animTime);
+                const wristY = Math.max(ballY + 0.24, 0.98 * scale);
+                const target = this.root.localToWorld(_v1.set(out * 0.34, wristY, 0.3));
+                const pole = _v2.copy(sideW).multiplyScalar(out * 0.6).addScaledVector(fwdW, -0.8);
+                solveTwoBone(arm.upper, arm.lower, arm.hand, target, pole, w);
+                continue;
+            }
+            const dirs = this.armDirs[sideKey];
+            if (!dirs) continue;
+            aimBone(arm.upper, arm.lower, toWorld(dirs[0]), w);
+            aimBone(arm.lower, arm.hand, toWorld(dirs[1]), w);
+        }
+
+        // Poignet cassé de la main de tir après le lâcher
+        const flick = g?.flick || 0;
+        this.flickW = (this.flickW || 0) + (flick - (this.flickW || 0)) * kw;
+        const shootArm = this.arms[this.dribbleHand === 'LEFT' ? 'minusX' : 'plusX'];
+        if (this.flickW > 0.01 && shootArm?.hand) rotateBoneWorld(shootArm.hand, sideW, this.flickW);
     }
 
     disposeOwned() {
@@ -469,6 +694,19 @@ const _b = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _wq = new THREE.Quaternion();
 const _pq = new THREE.Quaternion();
+const _cq = new THREE.Quaternion();
+const _fwd = new THREE.Vector3();
+const _side = new THREE.Vector3();
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _ia = new THREE.Vector3();
+const _ib = new THREE.Vector3();
+const _ic = new THREE.Vector3();
+const _id = new THREE.Vector3();
+const _ip = new THREE.Vector3();
+const _ik = new THREE.Vector3();
+const _rq = new THREE.Quaternion();
+const _rw = new THREE.Quaternion();
 
 /**
  * Oriente un os pour que la direction os -> enfant pointe vers dirWorld (mélangé avec la pose animée)
@@ -483,4 +721,43 @@ function aimBone(bone, child, dirWorld, weight) {
     const targetLocal = _pq.invert().multiply(_q.multiply(_wq));
     bone.quaternion.slerp(targetLocal, weight);
     bone.updateMatrixWorld(true);
+}
+
+/**
+ * Tourne un os autour d'un axe du monde (le reste de la chaîne suit)
+ */
+function rotateBoneWorld(bone, axisWorld, angle) {
+    _rq.setFromAxisAngle(axisWorld, angle);
+    bone.getWorldQuaternion(_rw);
+    setWorldQuaternion(bone, _rq.multiply(_rw));
+}
+
+/** Donne à un os une orientation dans le monde (convertie dans le repère de son parent) */
+function setWorldQuaternion(bone, worldQuat) {
+    bone.parent.getWorldQuaternion(_pq);
+    bone.quaternion.copy(_pq.invert().multiply(worldQuat));
+    bone.updateMatrixWorld(true);
+}
+
+/**
+ * IK à deux os (cuisse-mollet-pied, bras-avant-bras-main) : l'extrémité va sur target, le coude ou le
+ * genou plie du côté de pole. Les longueurs sont celles du squelette (taille du joueur comprise)
+ */
+function solveTwoBone(upper, middle, end, target, pole, weight) {
+    upper.getWorldPosition(_ia);
+    middle.getWorldPosition(_ib);
+    end.getWorldPosition(_ic);
+    const l1 = _ia.distanceTo(_ib);
+    const l2 = _ib.distanceTo(_ic);
+    _id.subVectors(target, _ia);
+    const dist = THREE.MathUtils.clamp(_id.length(), Math.abs(l1 - l2) + 1e-3, l1 + l2 - 1e-4);
+    _id.normalize();
+    const x = (l1 * l1 - l2 * l2 + dist * dist) / (2 * dist);
+    const h = Math.sqrt(Math.max(0, l1 * l1 - x * x));
+    _ip.copy(pole).addScaledVector(_id, -pole.dot(_id)).normalize();
+    _ik.copy(_ia).addScaledVector(_id, x).addScaledVector(_ip, h); // genou / coude
+    aimBone(upper, middle, _ib.subVectors(_ik, _ia).normalize(), weight);
+    middle.getWorldPosition(_ib);
+    _ic.copy(_ia).addScaledVector(_id, dist); // extrémité (cible ramenée à portée)
+    aimBone(middle, end, _ic.sub(_ib).normalize(), weight);
 }

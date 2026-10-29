@@ -32,13 +32,18 @@ export const NetSyncMethods = {
         const v = (vec) => ({ x: r(vec.x), y: r(vec.y), z: r(vec.z) });
         const players = [];
         for (const ent of this.entities.values()) {
-            players.push({
+            const pl = {
                 id: ent.id,
                 pos: v(ent.pos),
                 rotY: r(ent.rotY),
                 state: ent.state,
                 dribbleHand: ent.mesh.dribbleHand
-            });
+            };
+            // Pour les animations chez les invités : finition en cours, box-out, réaction
+            if (ent.isDunking) pl.fin = [ent.finishType, r(ent.dunkTimer / ent.dunkDuration)];
+            if (ent.boxOutTimer > 0) pl.bx = 1;
+            if (ent.reactTimer > 0) pl.rx = ent.react;
+            players.push(pl);
         }
         const b = this.ball;
         return {
@@ -123,6 +128,10 @@ export const NetSyncMethods = {
             ent.rotY = p.rotY;
             ent.state = p.state;
             if (p.dribbleHand) ent.mesh.dribbleHand = p.dribbleHand;
+            ent.netFinish = p.fin ? p.fin[0] : null;
+            ent.netFinishT = p.fin ? p.fin[1] : 0;
+            ent.boxOutTimer = p.bx ? 0.15 : 0;
+            if (p.rx) { ent.react = p.rx; ent.reactTimer = 0.15; }
         }
         // Feuille de match (envoyée par l'hôte à la fin du match)
         if (packet.sheet) this.applySheetPacket(packet.sheet);

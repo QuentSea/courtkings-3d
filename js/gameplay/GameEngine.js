@@ -356,6 +356,25 @@ export class GameEngine {
         bar.replaceChildren(...items);
     }
 
+    /**
+     * Ce que l'animation doit savoir en plus de l'état (AnimatedCharacter) : ballon en main, finition en cours,
+     * tir lâché, box-out, réaction, fin de match. Calculé pareil chez l'hôte et chez les invités (état du monde)
+     */
+    animationInfo(ent) {
+        const info = ent.animInfo || (ent.animInfo = {});
+        const b = this.ball;
+        const r = this.matchRules;
+        info.hasBall = b.holderId === ent.id;
+        info.finish = ent.isDunking ? ent.finishType : (ent.netFinish || null);
+        info.finishT = ent.isDunking ? ent.dunkTimer / ent.dunkDuration : (ent.netFinishT || 0);
+        info.release = b.state === 'SHOT' && b.pendingShotOutcome?.shooterId === ent.id ? b.flightTime : -1;
+        info.boxOut = ent.boxOutTimer > 0;
+        info.boxed = ent.boxedTimer > 0;
+        info.react = ent.reactTimer > 0 ? ent.react : null;
+        info.matchEnd = r.matchOver && r.winner ? (ent.team === r.winner ? 'WIN' : 'LOSE') : null;
+        return info;
+    }
+
     getLocalEntity() {
         return this.entities.get(this.localPlayerId);
     }
@@ -555,7 +574,7 @@ export class GameEngine {
                 ent.mesh.selectionRing.position.y = Math.max(0.02, 0.02 - ent.pos.y);
             }
             ent.mesh.root.rotation.y = ent.rotY;
-            ent.mesh.updateAnimation(dt, ent.state);
+            ent.mesh.updateAnimation(dt, ent.state, this.animationInfo(ent));
             this.updateScreenMarker(ent);
         }
 

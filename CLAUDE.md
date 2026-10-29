@@ -290,6 +290,25 @@
   - Testé : tir passé sur G (Espace ne tire plus, G lance et relâche le tir, gardé dans le navigateur), manette
     simulée (passe sur RB, A ne passe plus, X maintenu/relâché tire, croix ↑ fait bouger), touches par défaut,
     Échap ferme. Vraie manette pas testée.
+- **Animations plus réalistes** (29 octobre 2026, demandé par le joueur, sans nouveau fichier d'animation : le pack
+  Quaternius n'a aucune animation de basket) — `AnimatedCharacter.js` :
+  - `updateAnimation(dt, état, info)` : `info` vient de `GameEngine.animationInfo` (ballon en main, finition en cours
+    `finish`/`finishT`, `release` = temps depuis le départ de son tir, box-out, réaction, fin de match), calculé pareil
+    chez les invités (WORLD_STATE : `fin`, `bx`, `rx` par joueur).
+  - Déplacement mesuré dans le repère du joueur (`fwdSpeed`, `latSpeed`, `turnRate`) : reculer = animation de course
+    jouée à l'envers ; de côté = pas chassés procéduraux (`shufflePhase`, pieds posés par IK, jamais croisés) ;
+    buste penché dans les virages, en sprint et en dribble.
+  - `applyProcedural` : bassin descendu avec pieds gardés au sol (`solveTwoBone`, IK des jambes) pour l'armé du tir,
+    la réception des sauts (`LAND_TIME`), la défense et le box-out ; main de dribble sur le ballon (IK du bras,
+    `dribbleBallHeight` partagé avec Ball.js) ; gestes en plusieurs temps (`gesturePose`) : tir = armé devant la
+    poitrine, ballon au-dessus du front en l'air, bras tendu et poignet cassé après le lâcher ; lay-up = ballon
+    protégé puis bras tendu, genou levé ; dunk = bras armé derrière la tête puis smash, genoux repliés ; alley-oop =
+    mains tendues vers le ballon ; faute subie (buste en arrière), poing levé après un panier (`react`, `reactTimer`),
+    vainqueurs qui dansent (`Dance_Loop`), perdants penchés.
+  - Tir du joueur local : le saut part à 47 % de la jauge (`SHOT_JUMP_AT`, haut du saut sur la zone verte) au lieu
+    d'immédiatement ; le ballon est devant la poitrine pendant l'armé (Ball.js).
+  - Testé en images (armé, montée, lâcher, lay-up, dunk, pas chassés, fin de match) ; 5v5 de bots sans erreur,
+    animations ~1,3 ms par image pour 10 joueurs. Invités pas retestés.
 - **Menu caché pendant le match et pause** (29 octobre 2026, demandé par le joueur) : sur l'écran du match
   (`body.in-match`, posé par `switchScreen`), la barre de navigation, la barre d'outils du match et le bandeau des
   touches (`#controls-legend`) sont cachés ;

@@ -8,6 +8,9 @@ import { SCREENED_SPEED, SCREEN_MIN_TIME } from './Screens.js';
 import { FT_DISTANCE } from './Fouls.js';
 import { ACTION_ORDER } from './Bindings.js';
 
+// Moment du saut dans la jauge de tir : 3,6 m/s de détente => haut du saut ~0,27 s plus tard, sur la zone verte (0,78)
+const SHOT_JUMP_AT = 0.47;
+
 export const ControlsMethods = {
     bindGamepadEvents() {
         window.addEventListener('gamepadconnected', (e) => {
@@ -162,7 +165,8 @@ export const ControlsMethods = {
             const contest = this.calculateContestFactor(me) * me.shotContestMul;
             this.shotMeter.startCharge(me.profile.attributes, shotDist, contest, move ? move.penalty : 0);
             me.state = 'SHOOT';
-            me.vel.y = 3.6;
+            // Armé d'abord (genoux fléchis), saut ensuite : le haut du saut tombe sur la zone verte
+            me.shotJumpPending = true;
         } else {
             this.triggerJumpBlock(me);
         }
@@ -294,9 +298,14 @@ export const ControlsMethods = {
         if (me.isDunking) {
             return;
         }
+        if (!this.shotMeter.active) me.shotJumpPending = false;
         if (this.shotMeter.active) {
             const hoop = this.getAttackingHoopForTeam(me.team);
             me.rotY = Math.atan2(hoop.rimPos.x - me.pos.x, hoop.rimPos.z - me.pos.z);
+            if (me.shotJumpPending && this.shotMeter.progress >= SHOT_JUMP_AT && me.pos.y <= 0.05) {
+                me.shotJumpPending = false;
+                me.vel.y = 3.6;
+            }
             // Fadeaway : le tireur part en arrière pendant son saut (Moves.js)
             if (me.shotMove === 'FADE' && me.pos.y > 0) {
                 me.pos.addScaledVector(me.fadeDir, 1.6 * dt);

@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { POSITIONS } from '../config/constants.js';
+import { dribbleBallHeight } from '../character/AnimatedCharacter.js';
 
 export const BallMethods = {
     // broadcast : seules les actions du joueur local sont envoyées (une action reçue n'est jamais renvoyée)
@@ -87,12 +88,21 @@ export const BallMethods = {
                         holder.pos.z + forwardZ
                     );
                 } else {
-                    const bounceY = holder.state === 'SHOOT'
-                        ? holder.pos.y + 2.15
-                        : Math.abs(Math.sin(holder.mesh.animTime * 1.6)) * 0.68 + 0.16;
-                    const handSide = holder.mesh.dribbleHand === 'RIGHT' ? 0.34 : -0.34;
-                    const forwardX = Math.sin(holder.rotY) * 0.28 + Math.cos(holder.rotY) * handSide;
-                    const forwardZ = Math.cos(holder.rotY) * 0.28 - Math.sin(holder.rotY) * handSide;
+                    // Tir : devant la poitrine pendant l'armé (au sol), au-dessus du front en l'air ;
+                    // dribble : la main suit le même rebond (AnimatedCharacter)
+                    const posScale = POSITIONS[holder.profile.position]?.scaleY || 1.0;
+                    const shooting = holder.state === 'SHOOT';
+                    // Lay-up : ballon protégé contre la poitrine pendant la montée (même pose que l'animation)
+                    const inAir = holder.pos.y > 0.05 &&
+                        !(holder.isDunking && holder.dunkTimer / holder.dunkDuration < 0.45);
+                    const bounceY = shooting
+                        ? holder.pos.y + (inAir ? 2.15 : 1.25) * posScale
+                        : dribbleBallHeight(holder.mesh.animTime);
+                    const side = holder.mesh.dribbleHand === 'RIGHT' ? 1 : -1;
+                    const handSide = shooting ? side * (inAir ? 0.12 : 0) : side * 0.34;
+                    const fwd = shooting && !inAir ? 0.34 : 0.28;
+                    const forwardX = Math.sin(holder.rotY) * fwd + Math.cos(holder.rotY) * handSide;
+                    const forwardZ = Math.cos(holder.rotY) * fwd - Math.sin(holder.rotY) * handSide;
 
                     this.ball.pos.set(
                         holder.pos.x + forwardX,

@@ -125,6 +125,11 @@ export const ClockMethods = {
         const r = this.matchRules;
         if (team === 'A') r.scoreA += pts; else r.scoreB += pts;
         this.onScored(team, pts, scorerId, kind); // feuille de match
+        const scorer = this.entities.get(scorerId);
+        if (scorer && kind !== 'ft') {
+            scorer.react = 'CELEBRATE'; // poing levé (AnimatedCharacter)
+            scorer.reactTimer = 1.3;
+        }
         if (kind !== 'ft') this.noteScoreForTactics(team, pts); // défense « Auto » de l'adversaire (Tactics.js)
         r.deadBall = true;
         r.shotClockStopped = true;

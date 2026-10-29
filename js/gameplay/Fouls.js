@@ -62,6 +62,8 @@ export const FoulMethods = {
         if (!this.isAuthority || !fouler || !victim || r.matchOver) return;
         const teamFouls = ++r.teamFouls[fouler.team];
         this.onFoul(fouler, victim, teamFouls); // feuille de match
+        victim.react = 'FOULED';                // il encaisse le contact (AnimatedCharacter)
+        victim.reactTimer = 0.6;
 
         let shots = 0;
         if (shotPts) shots = made ? 1 : shotPts;

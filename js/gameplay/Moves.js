@@ -199,6 +199,7 @@ export const MoveMethods = {
             if (ent.boxOutTimer > 0) ent.boxOutTimer -= dt;
             if (ent.boxedTimer > 0) ent.boxedTimer -= dt;
             if (ent.stealCd > 0) ent.stealCd -= dt;
+            if (ent.reactTimer > 0) ent.reactTimer -= dt; // réaction animée (faute subie, célébration)
         }
     },
 

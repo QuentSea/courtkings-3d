@@ -216,6 +216,24 @@
        - Invités : la feuille part dans le WORLD_STATE (`sheet`) 2 fois par seconde une fois le match fini.
        - Testé : match complet (points de la feuille = score, 52 actions, filtre), tir à 3 pts d'un invité compté
          chez l'hôte et feuille reçue par l'invité, aucune erreur.
+- **Audit ponytail du 29 octobre 2026 : les 9 points corrigés** (testé : aucune erreur, 7 tests verts) :
+  1. Le match continue hors de l'écran du match (`gameEngine.update(dt, render)` appelé à chaque image, dessin
+     seulement sur l'écran du match) et onglet caché (`document.hidden` : un Worker fait avancer le match 20 fois/s
+     sans le dessiner, ~10 états du monde/s envoyés). Testé en simulant `document.hidden`.
+  2. Noms et postes du salon écrits en `textContent` (un nom `<img onerror=…>` ne s'exécute plus).
+  3. Mémoire : `disposeTree` (RenderSetup.js) libère l'ancien terrain dans `buildCourt` ; `AnimatedCharacter`
+     libère étiquette, anneau et **tous les squelettes copiés** (chaque pièce du modèle a sa texture d'os) ;
+     `CharacterMesh.disposeOwned` ajouté. Mesuré : textures stables à 85 sur 6 matchs (avant 85 → 380).
+  4. `setOnlineStatus` / `#room-online-status` : « En ligne », « Hors ligne (onglets de ce PC) », « Connecté »,
+     « Salon introuvable » (+ message) si l'hôte ne répond pas en 6 s ou si PeerJS dit `peer-unavailable`.
+  5. L'hôte ignore un contre ou une interception d'invité arrivés trop tard (`canStillBeBlocked`,
+     `canStillBeStolen` dans NetSync.js).
+  6. Sauvegarde du joueur dans `try` : navigateur qui bloque les données du site = le jeu démarre quand même.
+  7. `tests/regles.test.mjs` (7 tests, lancer `node --test` dans le dossier du jeu) : 24 s / 14 s, violation,
+     fin au score, fin au temps, panier en or, tir à la sirène, feuille de match. Vérifié qu'ils échouent si on
+     casse la règle des 14 s.
+  8. Supprimés : `isCheckBall`, `targetedTeammateId`, `matchStarted` (jamais lus).
+  9. Salon : seuls les joueurs nouveaux ou modifiés sont recréés (`lobbyMeshById`, clé = profil + équipe).
      - À faire : alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers
        francs, chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête

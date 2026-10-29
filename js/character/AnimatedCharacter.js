@@ -98,6 +98,9 @@ export class AnimatedCharacter {
         model.traverse(o => { if (o.isSkinnedMesh) skinned.push(o); });
         const body = skinned.find(m => m.name === tpl.bodyName) || skinned[0];
         this.skeleton = body.skeleton;
+        // La copie du modèle donne un squelette à chaque pièce (corps, yeux, sourcils...), chacun avec sa
+        // texture d'os sur la carte graphique : les libérer avec le reste
+        for (const m of skinned) this.disposables.push(m.skeleton);
         this.bones = {};
         for (const b of this.skeleton.bones) this.bones[b.name] = b;
 
@@ -157,6 +160,9 @@ export class AnimatedCharacter {
         this.nameSprite = this.createNameplateSprite(this.config.playerName, this.config.position, this.getOverallRating());
         this.nameSprite.position.y = 2.45 * posData.scaleY;
         this.root.add(this.nameSprite);
+        // Étiquette et anneau sont refaits à chaque reconstruction : les libérer avec le reste
+        this.disposables.push(this.nameSprite.material.map, this.nameSprite.material,
+            this.selectionRing.geometry, this.selectionRing.material);
 
         // 6. Animations
         this.mixer = new THREE.AnimationMixer(model);
@@ -191,6 +197,7 @@ export class AnimatedCharacter {
                 // Relier la coiffure aux os du corps (mêmes noms) pour qu'elle suive la tête
                 const bones = mesh.skeleton.bones.map(b => this.bones[b.name] || b);
                 const skeleton = new THREE.Skeleton(bones, mesh.skeleton.boneInverses);
+                this.disposables.push(skeleton);
                 const mat = mesh.material.clone();
                 mat.color.copy(colorRatio(hairHex, asset.colorRef));
                 mesh.material = mat;

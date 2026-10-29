@@ -28,15 +28,13 @@ export class CharacterBuilder {
         this.onConfirmCallback = onConfirmCallback;
 
         // Charger la sauvegarde locale ou le Preset #1 par défaut
-        const saved = localStorage.getItem('courtkings_player_profile');
-        if (saved) {
-            try {
-                this.profile = JSON.parse(saved);
-            } catch {
-                this.profile = structuredClone(CHARACTER_PRESETS[0]);
-            }
-        } else {
-            this.profile = structuredClone(CHARACTER_PRESETS[0]);
+        // (navigateur qui bloque les données du site : lire la sauvegarde lève une erreur, on part du preset)
+        this.profile = structuredClone(CHARACTER_PRESETS[0]);
+        try {
+            const saved = localStorage.getItem('courtkings_player_profile');
+            if (saved) this.profile = JSON.parse(saved);
+        } catch {
+            /* pas de sauvegarde lisible */
         }
 
         this.previewAnimState = 'IDLE';
@@ -459,7 +457,11 @@ export class CharacterBuilder {
     }
 
     saveProfile() {
-        localStorage.setItem('courtkings_player_profile', JSON.stringify(this.profile));
+        try {
+            localStorage.setItem('courtkings_player_profile', JSON.stringify(this.profile));
+        } catch {
+            /* données du site bloquées : le joueur n'est simplement pas gardé */
+        }
     }
 
     getProfile() {

@@ -27,7 +27,6 @@ export class NetworkManager {
             roomCode: '',
             mode: '3v3',
             fillWithBots: true,
-            matchStarted: false,
             players: {} // peerId -> { peerId, team: 'A'|'B', profile, isHost }
         };
     }
@@ -55,7 +54,6 @@ export class NetworkManager {
             roomCode: this.roomCode,
             mode,
             fillWithBots: true,
-            matchStarted: false,
             players: {
                 [this.localPeerId]: {
                     peerId: this.localPeerId,
@@ -67,9 +65,21 @@ export class NetworkManager {
         };
 
         this.setupBroadcastChannel(this.roomCode);
+        this.setOnlineStatus('connecting');
         await this.setupPeerJSHost(this.roomCode);
         this.notifyLobbyUpdated();
         return this.roomCode;
+    }
+
+    /**
+     * État de la connexion affiché dans le salon :
+     * 'connecting', 'online' (joignable d'autres PC), 'local' (onglets de ce PC seulement),
+     * 'not-found' (salon rejoint introuvable)
+     */
+    setOnlineStatus(status) {
+        if (status === this.onlineStatus) return; // PeerJS et le délai d'attente peuvent annoncer la même chose
+        this.onlineStatus = status;
+        if (this.callbacks.onOnlineStatus) this.callbacks.onOnlineStatus(status, this.isHost);
     }
 
     /**
@@ -89,6 +99,12 @@ export class NetworkManager {
         };
 
         this.setupBroadcastChannel(this.roomCode);
+        this.gotHostSync = false;
+        this.setOnlineStatus('connecting');
+        // Sans réponse de l'hôte (code faux, hôte parti, PeerJS injoignable) : prévenir le joueur
+        this.hostSyncTimer = setTimeout(() => {
+            if (!this.gotHostSync) this.setOnlineStatus('not-found');
+        }, 6000);
         await this.setupPeerJSClient(this.roomCode, localProfile);
 
         // Annoncer l'arrivée sur BroadcastChannel (multi-onglets local)
@@ -122,7 +138,10 @@ export class NetworkManager {
         return new Promise((resolve) => {
             try {
                 this.peerInstance = new window.Peer(peerId);
-                this.peerInstance.on('open', () => resolve(true));
+                this.peerInstance.on('open', () => {
+                    this.setOnlineStatus('online');
+                    resolve(true);
+                });
                 this.peerInstance.on('connection', (conn) => {
                     conn.on('open', () => {
                         this.peers.set(conn.peer, conn);
@@ -138,9 +157,14 @@ export class NetworkManager {
                         if (conn.lobbyPeerId) this.removePlayer(conn.lobbyPeerId);
                     });
                 });
-                this.peerInstance.on('error', () => resolve(false));
+                // Serveur PeerJS injoignable ou code déjà pris : le salon ne marche que sur ce PC
+                this.peerInstance.on('error', () => {
+                    this.setOnlineStatus('local');
+                    resolve(false);
+                });
                 setTimeout(() => resolve(false), 1800);
             } catch {
+                this.setOnlineStatus('local');
                 resolve(false);
             }
         });
@@ -170,7 +194,11 @@ export class NetworkManager {
                     });
                     setTimeout(() => resolve(false), 1800);
                 });
-                this.peerInstance.on('error', () => resolve(false));
+                this.peerInstance.on('error', (err) => {
+                    // Hôte introuvable : seulement si aucun onglet de ce PC n'a répondu non plus
+                    if (err?.type === 'peer-unavailable' && !this.gotHostSync) this.setOnlineStatus('not-found');
+                    resolve(false);
+                });
             } catch {
                 resolve(false);
             }
@@ -216,6 +244,11 @@ export class NetworkManager {
                 this.callbacks.onRoomFull();
             }
         } else if (packet.type === 'LOBBY_SYNC') {
+            if (!this.isHost && !this.gotHostSync) {
+                this.gotHostSync = true;
+                clearTimeout(this.hostSyncTimer);
+                this.setOnlineStatus(conn ? 'online' : 'local');
+            }
             this.lobbyState = packet.lobbyState;
             this.notifyLobbyUpdated();
         } else if (packet.type === 'TEAM_SWITCH') {
@@ -332,7 +365,6 @@ export class NetworkManager {
         if (needed > currentSize) {
             this.lobbyState.mode = needed <= 4 ? '4v4' : '5v5';
         }
-        this.lobbyState.matchStarted = true;
         this.broadcastPacket({
             type: 'START_MATCH',
             lobbyState: this.lobbyState
@@ -383,6 +415,7 @@ export class NetworkManager {
     }
 
     cleanup() {
+        clearTimeout(this.hostSyncTimer);
         if (this.broadcastChannel) {
             this.broadcastChannel.close();
             this.broadcastChannel = null;

@@ -26,3 +26,21 @@ export function asColorTexture(texture) {
     texture.colorSpace = THREE.SRGBColorSpace;
     return texture;
 }
+
+/**
+ * Libère la mémoire de la carte graphique d'un groupe retiré de la scène (formes, matériaux, textures).
+ * À n'utiliser que sur des objets qui ne partagent rien avec ce qui reste affiché.
+ */
+export function disposeTree(root) {
+    root.traverse((o) => {
+        o.geometry?.dispose();
+        if (o.isInstancedMesh) o.dispose();
+        const materials = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+        for (const m of materials) {
+            for (const value of Object.values(m)) {
+                if (value?.isTexture) value.dispose();
+            }
+            m.dispose();
+        }
+    });
+}

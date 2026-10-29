@@ -48,7 +48,6 @@ export class GameEngine {
 
         // Direction actuelle de visée du joueur local (Clavier ou Stick Gauche Manette)
         this.aimDirection = new THREE.Vector2(0, -1);
-        this.targetedTeammateId = null;
         this.passTargetIndicator = null;
 
         // État Manette (Gamepad API) pour détecter les fronts montants/descendants des boutons
@@ -82,7 +81,6 @@ export class GameEngine {
             shotClock: 24,
             possessionTeam: 'A',
             needsTakeBack: false,
-            isCheckBall: false,
             checkBallSeq: 0, // incrémenté à chaque remise en jeu : l'invité se replace quand il change
             sidesSwapped: false, // tout-terrain : vrai après la mi-temps (A attaque au sud, B au nord)
             // Chronos et fin de match (Clock.js)
@@ -370,9 +368,13 @@ export class GameEngine {
     /**
      * Boucle principale de mise à jour (60 FPS)
      */
-    update(dt) {
+    /**
+     * render = false : le match avance sans être dessiné (l'hôte est sur un autre écran ou son onglet est caché ;
+     * les invités dépendent de lui, voir main.js)
+     */
+    update(dt, render = true) {
         if (!this.isRunning) return;
-        this.quality.sample(dt);
+        if (render) this.quality.sample(dt);
 
         if (this.crossoverCooldown > 0) this.crossoverCooldown -= dt;
         if (this.stealCooldown > 0) this.stealCooldown -= dt;
@@ -526,7 +528,7 @@ export class GameEngine {
             }
         }
 
-        this.renderer.render(this.scene, this.camera);
+        if (render) this.renderer.render(this.scene, this.camera);
     }
 }
 

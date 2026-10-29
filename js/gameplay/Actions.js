@@ -144,18 +144,15 @@ export const ActionsMethods = {
         const me = this.getLocalEntity();
         if (!me || this.ball.holderId !== me.id || !this.passTargetIndicator) {
             if (this.passTargetIndicator) this.passTargetIndicator.visible = false;
-            this.targetedTeammateId = null;
             return;
         }
 
         const aimedMate = this.findAimedTeammate(me);
         if (!aimedMate) {
             this.passTargetIndicator.visible = false;
-            this.targetedTeammateId = null;
             return;
         }
 
-        this.targetedTeammateId = aimedMate.id;
         this.passTargetIndicator.visible = true;
         this.passTargetIndicator.position.set(aimedMate.pos.x, 0.02, aimedMate.pos.z);
 

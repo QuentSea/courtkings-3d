@@ -35,6 +35,7 @@ class CourtKingsApp {
             onWorldState: (packet) => this.gameEngine?.handleWorldState(packet),
             onPlayerLeft: (peerId) => this.gameEngine?.handlePlayerLeft(peerId),
             onHostLeft: () => this.notifyPlayer("L'hôte a quitté la partie : le match est terminé."),
+            onOnlineStatus: (status, isHost) => this.showOnlineStatus(status, isHost),
             onRoomFull: () => this.notifyPlayer('Salon complet : il y a déjà 10 joueurs (5 contre 5).'),
             onTeamFull: (team) => this.notifyPlayer(`L'équipe ${team} est complète (5 joueurs).`),
             onOnlyHostCanStart: () => this.notifyPlayer("Seul l'hôte (celui qui a créé le salon) peut lancer le match.")
@@ -274,6 +275,24 @@ class CourtKingsApp {
         if (joinInput && !joinInput.value) joinInput.value = code;
     }
 
+    // État de la connexion du salon, affiché à côté du code ; message si le salon rejoint est introuvable
+    showOnlineStatus(status, isHost) {
+        const el = document.getElementById('room-online-status');
+        const texts = {
+            connecting: 'Connexion…',
+            online: isHost ? '🟢 En ligne : tes amis peuvent rejoindre' : "🟢 Connecté à l'hôte",
+            local: isHost ? '🟠 Hors ligne : seuls les onglets de ce PC peuvent rejoindre' : '🟢 Connecté (même PC)',
+            'not-found': '🔴 Salon introuvable'
+        };
+        if (el) {
+            el.textContent = texts[status] || '';
+            el.dataset.status = status;
+        }
+        if (status === 'not-found') {
+            this.notifyPlayer('Salon introuvable : vérifie le code (exemple : BASKET-4K7Q) et que ton ami a bien le jeu ouvert.');
+        }
+    }
+
     // Message au joueur : bandeau du terrain pendant un match, fenêtre simple ailleurs
     notifyPlayer(message) {
         if (this.currentScreen === 'match' && this.gameEngine?.isRunning) {
@@ -331,14 +350,19 @@ class CourtKingsApp {
             const prof = p.profile;
             const a = prof.attributes || { shooting: 80, defense: 80, dribble: 80, finishing: 80 };
             const ovr = Math.round((a.shooting + a.defense + a.dribble + a.finishing) / 4);
-            div.innerHTML = `
-                <div class="lp-badge">${prof.position}</div>
-                <div class="lp-info">
-                    <div class="lp-name">${prof.playerName} ${p.peerId === this.network.localPeerId ? '(VOUS)' : ''}</div>
-                    <div class="lp-sub">${POSITIONS[prof.position]?.shortName || prof.position} • OVR ${ovr}</div>
-                </div>
-                <div class="lp-status">${isBot ? 'IA BOT' : 'PRÊT'}</div>
-            `;
+            // Nom et poste viennent des autres joueurs : toujours écrits comme du texte, jamais comme du HTML
+            const el = (cls, text, parent = div) => {
+                const node = document.createElement('div');
+                node.className = cls;
+                node.textContent = text;
+                parent.appendChild(node);
+                return node;
+            };
+            el('lp-badge', prof.position);
+            const info = el('lp-info', '');
+            el('lp-name', `${prof.playerName} ${p.peerId === this.network.localPeerId ? '(VOUS)' : ''}`, info);
+            el('lp-sub', `${POSITIONS[prof.position]?.shortName || prof.position} • OVR ${ovr}`, info);
+            el('lp-status', isBot ? 'IA BOT' : 'PRÊT');
             return div;
         };
 
@@ -364,21 +388,32 @@ class CourtKingsApp {
 
     rebuildLobby3DCharacters(players) {
         if (!this.lobbyScene) return;
-        this.lobbySceneMeshes.forEach(m => {
-            this.lobbyScene.remove(m.root);
-            m.disposeOwned?.();
-        });
-        this.lobbySceneMeshes = [];
+        // Ne refaire que les joueurs nouveaux ou modifiés (profil ou équipe) ; les autres sont gardés
+        const previous = this.lobbyMeshById || new Map();
+        const next = new Map();
+        for (const p of players) {
+            const key = JSON.stringify(p.profile) + p.team;
+            const kept = previous.get(p.peerId);
+            if (kept && kept.key === key) {
+                next.set(p.peerId, kept);
+                previous.delete(p.peerId);
+            } else {
+                next.set(p.peerId, { key, mesh: createCharacterMesh({ ...p.profile, team: p.team }) });
+            }
+        }
+        for (const { mesh } of previous.values()) {
+            this.lobbyScene.remove(mesh.root);
+            mesh.disposeOwned?.();
+        }
+        this.lobbyMeshById = next;
+        this.lobbySceneMeshes = [...next.values()].map(entry => entry.mesh);
 
-        const total = players.length;
-        players.forEach((p, idx) => {
-            const mesh = createCharacterMesh({ ...p.profile, team: p.team });
-            // Resserrer quand il y a beaucoup de joueurs (jusqu'à 10) pour qu'ils tiennent tous à l'écran
-            const spacing = Math.min(1.65, 11 / Math.max(total, 1));
-            const offsetX = (idx - (total - 1) / 2) * spacing;
-            mesh.root.position.set(offsetX, 0, 0);
-            this.lobbyScene.add(mesh.root);
-            this.lobbySceneMeshes.push(mesh);
+        // Resserrer quand il y a beaucoup de joueurs (jusqu'à 10) pour qu'ils tiennent tous à l'écran
+        const total = this.lobbySceneMeshes.length;
+        const spacing = Math.min(1.65, 11 / Math.max(total, 1));
+        this.lobbySceneMeshes.forEach((mesh, idx) => {
+            mesh.root.position.set((idx - (total - 1) / 2) * spacing, 0, 0);
+            if (!mesh.root.parent) this.lobbyScene.add(mesh.root);
         });
     }
 
@@ -401,11 +436,30 @@ class CourtKingsApp {
             if (this.currentScreen === 'lobby' && this.lobbyRenderer) {
                 this.lobbySceneMeshes.forEach(m => m.updateAnimation(dt, 'IDLE'));
                 this.lobbyRenderer.render(this.lobbyScene, this.lobbyCamera);
-            } else if (this.currentScreen === 'match') {
-                this.gameEngine.update(dt);
             }
+            // Le match continue même si on regarde le salon ou le créateur : chez l'hôte, il calcule
+            // le jeu de tout le monde (dessiné seulement sur l'écran du match)
+            this.gameEngine.update(dt, this.currentScreen === 'match');
         };
         requestAnimationFrame(loop);
+
+        // Onglet caché ou fenêtre réduite : le navigateur arrête requestAnimationFrame. Un petit Worker
+        // (non freiné en arrière-plan) fait alors avancer le match 20 fois par seconde, sans le dessiner.
+        try {
+            const tick = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 50);'])));
+            let lastTick = performance.now();
+            tick.onmessage = () => {
+                const now = performance.now();
+                const dt = Math.min(0.1, (now - lastTick) / 1000);
+                lastTick = now;
+                if (document.hidden) {
+                    this.gameEngine.update(dt, false);
+                    lastTime = now; // au retour, pas de grand saut dans la boucle normale
+                }
+            };
+        } catch (e) {
+            console.warn('Minuterie de secours indisponible :', e);
+        }
     }
 }
 

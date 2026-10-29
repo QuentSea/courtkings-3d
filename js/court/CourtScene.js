@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { asColorTexture } from '../render/RenderSetup.js';
+import { asColorTexture, disposeTree } from '../render/RenderSetup.js';
 
 export class CourtScene {
     constructor(scene) {
@@ -233,8 +233,11 @@ export class CourtScene {
      */
     buildCourt(isHalfCourt = true) {
         this.isHalfCourt = isHalfCourt;
+        // Ancien terrain : le retirer et libérer sa mémoire (parquet ~12 Mo, public, écrans...)
         while (this.courtGroup.children.length > 0) {
-            this.courtGroup.remove(this.courtGroup.children[0]);
+            const old = this.courtGroup.children[0];
+            this.courtGroup.remove(old);
+            disposeTree(old);
         }
         this.hoops = [];
 

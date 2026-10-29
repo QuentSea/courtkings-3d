@@ -16,7 +16,7 @@ import {
     JERSEY_COLORS,
     POSITIONS
 } from '../config/constants.js';
-import { asColorTexture } from '../render/RenderSetup.js';
+import { asColorTexture, disposeTree } from '../render/RenderSetup.js';
 
 export class CharacterMesh {
     constructor(config = {}) {
@@ -175,13 +175,21 @@ export class CharacterMesh {
     /**
      * Construit ou reconstruit intégralement le Mesh 3D haute-fidélité du personnage
      */
+    /**
+     * Retire et libère le corps, l'étiquette et l'anneau (reconstruction ou joueur qui quitte la scène)
+     */
+    disposeOwned() {
+        for (const obj of [...this.bodyGroup.children, this.nameSprite, this.selectionRing]) {
+            if (!obj) continue;
+            obj.parent?.remove(obj);
+            disposeTree(obj);
+        }
+        this.nameSprite = null;
+        this.selectionRing = null;
+    }
+
     buildMesh() {
-        while (this.bodyGroup.children.length > 0) {
-            this.bodyGroup.remove(this.bodyGroup.children[0]);
-        }
-        if (this.nameSprite) {
-            this.root.remove(this.nameSprite);
-        }
+        this.disposeOwned();
 
         const skinMat = new THREE.MeshStandardMaterial({
             color: this.getSkinHex(),

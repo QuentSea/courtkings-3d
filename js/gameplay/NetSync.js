@@ -163,6 +163,22 @@ export const NetSyncMethods = {
         }
     },
 
+    /** Hôte : un tir adverse est-il encore en l'air (ou en préparation) au moment où le contre arrive ? */
+    canStillBeBlocked(blocker) {
+        if (!blocker || this.matchRules.deadBall) return false;
+        if (this.ball.state === 'SHOT') return this.ball.pendingShotOutcome?.shooterTeam !== blocker.team;
+        const carrier = this.ball.state === 'HELD' ? this.entities.get(this.ball.holderId) : null;
+        return !!carrier && carrier.team !== blocker.team && (carrier.state === 'SHOOT' || carrier.state === 'DUNK');
+    },
+
+    /** Hôte : l'adversaire tient-il encore le ballon (ou le passe) au moment où l'interception arrive ? */
+    canStillBeStolen(stealer) {
+        if (!stealer || this.matchRules.deadBall) return false;
+        if (this.ball.state === 'PASS') return this.matchRules.possessionTeam !== stealer.team;
+        const carrier = this.ball.state === 'HELD' ? this.entities.get(this.ball.holderId) : null;
+        return !!carrier && carrier.team !== stealer.team;
+    },
+
     handleRemoteGameEvent(packet) {
         const { eventName, payload } = packet;
         if (eventName === 'PASS') {
@@ -180,6 +196,8 @@ export const NetSyncMethods = {
             }
         } else if (eventName === 'BLOCK') {
             const blocker = this.entities.get(payload.blockerId);
+            // Contre arrivé en retard (ballon déjà retombé ou ramassé) : l'hôte l'ignore
+            if (this.isAuthority && !this.canStillBeBlocked(blocker)) return;
             if (this.isAuthority) this.onBlock(payload.blockerId, this.ball.pendingShotOutcome?.shooterId || this.ball.holderId);
             this.ball.holderId = null;
             this.ball.pendingShotOutcome = null;
@@ -191,6 +209,8 @@ export const NetSyncMethods = {
             }
         } else if (eventName === 'STEAL') {
             const stealer = this.entities.get(payload.stealerId);
+            // Interception arrivée en retard (tir parti, balle morte, ballon déjà à son équipe) : ignorée
+            if (this.isAuthority && !this.canStillBeStolen(stealer)) return;
             if (stealer) {
                 this.giveBallTo(stealer.id, true);
                 this.showRuleAlert(`⚡ INTERCEPTION DE ${stealer.profile.playerName} !`);

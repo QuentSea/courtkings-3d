@@ -38,6 +38,7 @@ import { FoulMethods } from './Fouls.js';
 import { MoveMethods } from './Moves.js';
 import { TacticMethods } from './Tactics.js';
 import { KeyBindings, ACTIONS } from './Bindings.js';
+import { SoundFX } from '../audio/SoundFX.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -124,6 +125,12 @@ export class GameEngine {
         this.keys = {};
         this.crossoverCooldown = 0;
         this.networkSyncTimer = 0;
+
+        // Sons (SoundFX.js) ; ceux de l'hôte partent aussi chez les invités avec l'état du monde (NetSync.js)
+        this.sound = new SoundFX();
+        this.pendingSfx = [];
+        this.lastBallY = 0;
+        this.crowdOn = false;
 
         this.initThreeScene();
         this.quality = new QualityManager(this);
@@ -378,6 +385,31 @@ export class GameEngine {
     }
 
     /**
+     * Son d'une action du jeu (SoundFX.js) à l'endroit `pos`. Décidé par l'hôte : il l'envoie aussi aux invités ;
+     * chez un invité, seuls les sons calculés sur place (local = true, ex. le dribble) sont joués ici
+     */
+    playSound(name, pos = null, local = false) {
+        if (!this.isAuthority && !local) return;
+        this.sound.play(name, pos, this.camera);
+        const others = Object.keys(this.network.lobbyState?.players || {}).length > 1;
+        if (this.isAuthority && !local && others && this.pendingSfx.length < 8) {
+            this.pendingSfx.push([name, +(pos?.x ?? 0).toFixed(1), +(pos?.z ?? 0).toFixed(1)]);
+        }
+    }
+
+    /** Rebond du dribble : le ballon tenu touche le parquet (calculé chez chacun, pas envoyé) */
+    updateDribbleSound() {
+        const b = this.ball;
+        const holder = b.state === 'HELD' ? this.entities.get(b.holderId) : null;
+        const dribbling = holder && (holder.state === 'DRIBBLE' || holder.state === 'CROSSOVER');
+        if (dribbling && b.pos.y > this.lastBallY && this.lastBallFalling && this.lastBallY < 0.3) {
+            this.playSound('dribble', b.pos, true);
+        }
+        this.lastBallFalling = b.pos.y < this.lastBallY;
+        this.lastBallY = b.pos.y;
+    }
+
+    /**
      * L'hôte (ou le joueur seul) décide de tout : bots, ballon, paniers, score, remises en jeu.
      * Un invité ne simule que son propre joueur et applique l'état envoyé par l'hôte.
      */
@@ -447,6 +479,12 @@ export class GameEngine {
      */
     update(dt, render = true) {
         if (!this.isRunning) return;
+        // Murmure de la foule : seulement quand on regarde un match qui se joue
+        const crowd = render && !this.paused && !this.matchRules.matchOver;
+        if (crowd !== this.crowdOn) {
+            this.crowdOn = crowd;
+            this.sound.setCrowd(crowd ? 1 : 0);
+        }
         if (this.paused) {
             this.pollGamepadInput(); // Start pour reprendre
             if (render) this.renderer.render(this.scene, this.camera);
@@ -588,6 +626,7 @@ export class GameEngine {
 
         // 7. Mise à jour de la physique du Ballon
         this.updateBallPhysics(dt);
+        this.updateDribbleSound();
 
         // 8. Vérification de la règle "Take Back" derrière l'arc des 3 points en Demi-terrain
         if (isAuthority && this.currentMode.isHalfCourt && this.matchRules.needsTakeBack && this.ball.holderId) {

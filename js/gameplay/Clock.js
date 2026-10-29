@@ -65,6 +65,7 @@ export const ClockMethods = {
                 this.pendingHalftimeAlert = true;
                 this.stopPlay();
                 this.showRuleAlert('⏱️ FIN DE LA 1RE MI-TEMPS !');
+                this.playSound('buzzer');
                 this.scheduleCheckBall('B', 1800);
                 return;
             }
@@ -102,6 +103,7 @@ export const ClockMethods = {
         this.onShotClockViolation(team, this.ball.state === 'HELD' ? this.ball.holderId : null);
         this.stopPlay();
         this.showRuleAlert(`⏱️ 24 SECONDES ! BALLE À L'ÉQUIPE ${other}`);
+        this.playSound('buzzer');
         this.scheduleCheckBall(other, 1500);
     },
 
@@ -184,6 +186,8 @@ export const ClockMethods = {
         r.freeThrow = null;
         this.stopPlay();
         this.showRuleAlert(`🏆 VICTOIRE DE L'ÉQUIPE ${winner} !`);
+        this.playSound('buzzer');
+        this.playSound('cheer');
         this.showMatchEnd();
     },
 

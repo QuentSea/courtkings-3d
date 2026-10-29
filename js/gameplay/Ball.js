@@ -21,6 +21,7 @@ export const BallMethods = {
         const dist = this.ball.flightStart.distanceTo(this.ball.flightTarget);
         this.ball.flightDuration = Math.max(0.20, Math.min(0.50, dist * 0.05));
         this.ball.flightArcHeight = 0.50;
+        this.playSound('pass', fromEnt.pos);
 
         if (broadcast) this.network.sendGameEvent('PASS', {
             fromId: fromEnt.id,
@@ -57,7 +58,10 @@ export const BallMethods = {
         if (this.isAuthority) this.onShotTaken(shooter, !!outcome.isThreePointer, !!freeThrow);
         // Faute sur le tireur (hôte) : sifflée tout de suite, lancers francs une fois le tir retombé
         const fouledBy = this.isAuthority && !freeThrow ? this.rollShootingFoul(shooter) : null;
-        if (fouledBy) this.showRuleAlert(`🟨 FAUTE SUR LE TIR DE ${shooter.profile.playerName} !`);
+        if (fouledBy) {
+            this.showRuleAlert(`🟨 FAUTE SUR LE TIR DE ${shooter.profile.playerName} !`);
+            this.playSound('whistle', shooter.pos);
+        }
         this.ball.pendingShotOutcome = {
             ...outcome,
             freeThrow,
@@ -145,6 +149,7 @@ export const BallMethods = {
                     if (Math.random() < interceptProb) {
                         this.giveBallTo(ent.id, true);
                         this.showRuleAlert(`⚡ PASSE COUPÉE PAR ${ent.profile.playerName} !`);
+                        this.playSound('steal', ent.pos);
                         return;
                     }
                 }
@@ -213,6 +218,8 @@ export const BallMethods = {
         const foulerId = this.rollShootingFoul(dunker, true);
         const alleyOop = !!dunker.alleyOopFrom;
         dunker.alleyOopFrom = null;
+        this.playSound(isMake ? 'dunk' : 'rim', hoop.rimPos);
+        if (foulerId) this.playSound('whistle', dunker.pos);
 
         if (isMake) {
             // Le ballon est violemment écrasé à travers le filet vers le parquet
@@ -257,6 +264,14 @@ export const BallMethods = {
         const ft = outcome.freeThrow;          // lancer franc (Fouls.js)
         const foulerId = outcome.fouledBy;     // faute sur le tireur : lancers francs après le tir
         const pts = ft ? 1 : (outcome.isThreePointer ? 3 : 2);
+        // Filet (et la foule pour un panier à 3 points), sinon cercle ou planche
+        const rim = this.ball.flightTarget;
+        if (outcome.isMake) {
+            this.playSound('swish', rim);
+            if (pts === 3) this.playSound('cheer', rim);
+        } else {
+            this.playSound(Math.random() < 0.3 ? 'board' : 'rim', rim);
+        }
 
         if (outcome.isMake) {
             // Le ballon tombe à travers le filet : sinon le panier serait recompté à chaque image

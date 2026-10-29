@@ -96,6 +96,7 @@ export const ActionsMethods = {
         }
         entity.mesh.dribbleHand = entity.mesh.dribbleHand === 'RIGHT' ? 'LEFT' : 'RIGHT';
         entity.state = 'CROSSOVER';
+        this.playSound('squeak', entity.pos, !this.isAuthority);
 
         const dribbleAttr = entity.profile.attributes?.dribble || 80;
         const burst = 0.65 + (dribbleAttr / 99) * 0.65;
@@ -231,6 +232,7 @@ export const ActionsMethods = {
                 if (this.getHorizontalDist(defender.pos, this.ball.pos) < 1.25 * posScale && Math.random() < laneChance) {
                     this.giveBallTo(defender.id, true);
                     this.showRuleAlert(`⚡ PASSE INTERCEPTÉE PAR ${defender.profile.playerName} !`);
+                    this.playSound('steal', defender.pos, defender.isLocal && !this.isAuthority);
                     if (defender.isLocal) this.network.sendGameEvent('STEAL', { stealerId: defender.id });
                     return;
                 }
@@ -262,6 +264,7 @@ export const ActionsMethods = {
         if (Math.random() < stealChance) {
             this.giveBallTo(defender.id, true);
             this.showRuleAlert(`⚡ INTERCEPTION (STEAL) DE ${defender.profile.playerName} !`);
+            this.playSound('steal', defender.pos, defender.isLocal && !this.isAuthority);
             if (defender.isLocal) this.network.sendGameEvent('STEAL', { stealerId: defender.id });
         } else if (this.rollReachInFoul(defender, carrier, dist)) {
             // Faute en voulant prendre le ballon (Fouls.js) : décidée par l'hôte pour un invité
@@ -367,6 +370,7 @@ export const ActionsMethods = {
             : `🚫 CONTRE ÉNORME (BLOCK) DE ${blocker.profile.playerName} !`;
 
         this.showRuleAlert(msg);
+        this.playSound('block', this.ball.pos, blocker.isLocal && !this.isAuthority);
         if (this.shotMeter) {
             this.shotMeter.showFeedback('TIR CONTRÉ (BLOCKED !)', 100, 'feedback-red', false);
         }

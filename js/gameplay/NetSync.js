@@ -86,6 +86,8 @@ export const NetSyncMethods = {
                 plays: this.matchRules.plays
             },
             alert: { seq: this.alertSeq, text: this.lastAlertText },
+            // Sons de l'hôte depuis le dernier envoi (playSound) : les invités les jouent aussi
+            sfx: this.pendingSfx.length ? this.pendingSfx.splice(0) : undefined,
             // Feuille de match : seulement une fois le match fini, 2 fois par seconde (paquet plus lourd)
             sheet: this.matchRules.matchOver && (this.sheetPacket++ % 10 === 0) ? this.buildSheetPacket() : undefined
         };
@@ -190,6 +192,7 @@ export const NetSyncMethods = {
             this.alertSeq = packet.alert.seq;
             if (packet.alert.text) this.showRuleAlert(packet.alert.text);
         }
+        for (const [name, x, z] of packet.sfx || []) this.sound.play(name, { x, y: 1.5, z }, this.camera);
     },
 
     /** Hôte : un tir adverse est-il encore en l'air (ou en préparation) au moment où le contre arrive ? */

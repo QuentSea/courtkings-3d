@@ -31,6 +31,7 @@ function fakeEngine({ targetScore = 21, gameDuration = 420, isHalfCourt = true }
         checkHalftime() {},
         showRuleAlert(text) { this.alerts.push(text); },
         showMatchEnd() {},
+        playSound() {},
         getLocalEntity() { return null; },
         // Tactiques (Tactics.js charge Three.js) : sans effet ici
         resetTactics() {},

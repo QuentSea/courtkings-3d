@@ -64,6 +64,7 @@ export const FoulMethods = {
         this.onFoul(fouler, victim, teamFouls); // feuille de match
         victim.react = 'FOULED';                // il encaisse le contact (AnimatedCharacter)
         victim.reactTimer = 0.6;
+        if (!shotPts) this.playSound('whistle', victim.pos); // faute sur un tir : sifflée au départ du tir (Ball.js)
 
         let shots = 0;
         if (shotPts) shots = made ? 1 : shotPts;

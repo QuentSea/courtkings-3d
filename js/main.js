@@ -246,6 +246,18 @@ class CourtKingsApp {
             this.gameEngine.bindingsPanel.open();
         });
 
+        // Son (SoundFX.js) : couper ou remettre, gardé dans le navigateur
+        const soundBtn = document.getElementById('btn-hud-sound');
+        const showSound = () => {
+            if (soundBtn) soundBtn.textContent = this.gameEngine.sound.muted ? '🔇 Son coupé' : '🔊 Son';
+        };
+        showSound();
+        soundBtn?.addEventListener('click', (e) => {
+            this.gameEngine.sound.setMuted(!this.gameEngine.sound.muted);
+            showSound();
+            e.currentTarget.blur();
+        });
+
         // Tactiques de l'équipe du joueur (Tactics.js) : l'hôte décide, un invité envoie son choix
         const offenseSelect = document.getElementById('hud-offense');
         const defenseSelect = document.getElementById('hud-defense');

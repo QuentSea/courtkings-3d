@@ -332,6 +332,7 @@ export const BotAIMethods = {
         this.clampToCourtBounds(inside);
         if (inside.distanceTo(test) > 0.3) side = -side;
         bot.mesh.dribbleHand = side > 0 ? 'RIGHT' : 'LEFT'; // crossover : le ballon change de main
+        this.playSound('squeak', bot.pos);
         return { kind: 'GAP', side, timer: 1.0 };
     },
 

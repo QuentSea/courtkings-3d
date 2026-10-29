@@ -291,7 +291,8 @@
     simulée (passe sur RB, A ne passe plus, X maintenu/relâché tire, croix ↑ fait bouger), touches par défaut,
     Échap ferme. Vraie manette pas testée.
 - **Menu caché pendant le match et pause** (29 octobre 2026, demandé par le joueur) : sur l'écran du match
-  (`body.in-match`, posé par `switchScreen`), la barre de navigation et la barre d'outils du match sont cachées ;
+  (`body.in-match`, posé par `switchScreen`), la barre de navigation, la barre d'outils du match et le bandeau des
+  touches (`#controls-legend`) sont cachés ;
   l'écran du match prend toute la hauteur. **Échap** (fixe), **P** ou **Start** (action `pause`, réglable) →
   `setMenuOpen` (Controls.js) : classe `menu-open` (barre du haut par-dessus, tableau de score décalé de 64 px),
   carte `#pause-overlay` avec « Reprendre ». Seul contre les bots (`lobbyState.players` ≤ 1) : `paused`, `update`

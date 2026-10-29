@@ -1506,7 +1506,8 @@ body.in-match .top-navbar {
     right: 0;
 }
 body.in-match:not(.menu-open) .top-navbar,
-body.in-match:not(.menu-open) .match-quick-toolbar { display: none; }
+body.in-match:not(.menu-open) .match-quick-toolbar,
+body.in-match:not(.menu-open) .controls-Overlay-bar { display: none; }
 body.in-match.menu-open .match-hud-top { top: 64px; }
 
 .pause-overlay {

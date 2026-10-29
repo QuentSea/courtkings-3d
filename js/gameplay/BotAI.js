@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three';
-import { POSITIONS } from '../config/constants.js';
+import { POSITIONS, DIFFICULTY } from '../config/constants.js';
 import { SCREENED_SPEED } from './Screens.js';
 
 export const BotAIMethods = {
@@ -31,8 +31,9 @@ export const BotAIMethods = {
         const isTeammateOfHuman = Array.from(this.entities.values()).some(
             e => !e.isBot && e.team === bot.team
         );
+        const skill = this.botSkill(bot);
         // Niveau des Bots relevé : vitesse compétitive aussi bien pour vos alliés (4.75) que pour l'équipe adverse (4.35)
-        const botSpeed = (isTeammateOfHuman ? 4.75 : 4.35) * posData.baseSpeed;
+        const botSpeed = (isTeammateOfHuman ? 4.75 : 4.35) * posData.baseSpeed * skill.speed;
 
         // Lancers francs : tout le monde reste à sa place (le tireur bot lance tout seul, Fouls.js)
         if (this.matchRules.freeThrow) {
@@ -173,12 +174,26 @@ export const BotAIMethods = {
                     assignedMan.pos.z + toHoopVec.z * cushion
                 );
 
-                const defReactionSpeed = isTeammateOfHuman ? botSpeed * 0.92 : botSpeed * 0.86;
+                const defReactionSpeed = isTeammateOfHuman ? botSpeed * 0.92 : botSpeed * 0.86 * skill.react;
                 const d = this.moveEntityTowards(bot, guardPos, defReactionSpeed, dt);
                 bot.rotY = Math.atan2(assignedMan.pos.x - bot.pos.x, assignedMan.pos.z - bot.pos.z);
                 this.botContest(bot, assignedMan, d);
             }
         }
+    },
+
+    /**
+     * Niveau d'un bot (constants.js, DIFFICULTY) : celui choisi dans le salon pour les bots qui jouent contre au
+     * moins un humain, « Normal » pour les autres (coéquipiers d'un humain, matchs entre bots)
+     */
+    botSkill(ent) {
+        if (!ent?.isBot) return DIFFICULTY.NORMAL;
+        let humanFoe = false;
+        for (const e of this.entities.values()) {
+            if (e.team === ent.team && !e.isBot) return DIFFICULTY.NORMAL;
+            if (e.team !== ent.team && !e.isBot) humanFoe = true;
+        }
+        return humanFoe ? this.difficulty : DIFFICULTY.NORMAL;
     },
 
     /** Bot défenseur face à un attaquant : il saute pour contester s'il tire juste devant lui, sinon posture */
@@ -188,7 +203,7 @@ export const BotAIMethods = {
         if (
             (man.state === 'SHOOT' || man.state === 'DUNK') &&
             distToMan < 1.55 &&
-            Math.random() < (0.025 + (defStat / 99) * 0.035)
+            Math.random() < (0.025 + (defStat / 99) * 0.035) * this.botSkill(bot).react
         ) {
             this.triggerJumpBlock(bot);
         } else if (bot.pos.y <= 0.05) {
@@ -307,9 +322,11 @@ export const BotAIMethods = {
         const pass = this.bestPassTarget(bot, hoop, isTeammateOfHuman);
         if (pass) options.push({ kind: 'PASS', v: pass.value * 0.9, ent: pass.ent });
 
+        // Hasard dans le choix : plus petit pour un bot de haut niveau (meilleure option plus souvent)
+        const spread = this.botSkill(bot).think;
         let best = null;
         for (const o of options) {
-            o.score = o.v * (0.85 + Math.random() * 0.3);
+            o.score = o.v * (1 - spread / 2 + Math.random() * spread);
             if (!best || o.score > best.score) best = o;
         }
         if (best.kind === 'SHOOT') {
@@ -353,10 +370,12 @@ export const BotAIMethods = {
         const stat = (three ? a.shooting : a.finishing) || 70;
         // À 3 points, 10 % de moins qu'à 2 points : à réussite égale, les bots ne tiraient plus que de loin
         const far = three ? 0.1 : 0;
-        // Bots alliés : 48 à 82 % ; bots adverses calibrés à 52-64 % ouverts à 2 points (modulé par votre contestation)
+        // Bots alliés : 48 à 82 % ; bots adverses calibrés à 52-64 % ouverts à 2 points (modulé par votre contestation),
+        // plus ou moins selon le niveau choisi dans le salon
+        const level = this.botSkill(ent).shot;
         return isTeammateOfHuman
             ? Math.max(0.48 - far, Math.min(0.82, (stat / 99) * 0.80 - far - contest * 0.30))
-            : Math.max(0.28 - far / 2, Math.min(0.65, 0.52 + ((stat - 60) / 39) * 0.12 - far - contest * 0.25));
+            : Math.max(0.28 - far / 2 + level, Math.min(0.65 + level, 0.52 + ((stat - 60) / 39) * 0.12 - far + level - contest * 0.25));
     },
 
     /** Tir en suspension d'un bot (step-back ou fadeaway s'il est collé, Moves.js) */

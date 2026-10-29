@@ -184,6 +184,11 @@ class CourtKingsApp {
             });
         }
 
+        // Niveau des bots adverses (l'hôte choisit)
+        document.getElementById('lobby-difficulty')?.addEventListener('change', (e) => {
+            this.network.setDifficulty(e.target.value);
+        });
+
         // Choix d'équipe (Équipe A / Équipe B)
         const btnTeamA = document.getElementById('btn-join-team-a');
         const btnTeamB = document.getElementById('btn-join-team-b');
@@ -360,6 +365,12 @@ class CourtKingsApp {
         document.querySelectorAll('[data-mode-select]').forEach((btn) => {
             btn.classList.toggle('active', btn.dataset.modeSelect === lobbyState.mode);
         });
+
+        const difficultySelect = document.getElementById('lobby-difficulty');
+        if (difficultySelect) {
+            difficultySelect.value = lobbyState.difficulty || 'NORMAL';
+            difficultySelect.disabled = !this.network.isHost;
+        }
 
         const modeInfo = GAME_MODES[lobbyState.mode] || GAME_MODES['3v3'];
         const modeDescEl = document.getElementById('lobby-mode-description');

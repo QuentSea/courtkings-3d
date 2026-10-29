@@ -272,7 +272,8 @@ export const TacticMethods = {
         this.moveEntityTowards(bot, spot, speed * 1.05, dt);
         bot.rotY = Math.atan2(handler.pos.x - bot.pos.x, handler.pos.z - bot.pos.z);
         if (bot.pos.y <= 0.05) bot.state = 'DEFENSE';
-        if (this.getHorizontalDist(bot.pos, handler.pos) < 1.6 && !(bot.stealCd > 0) && Math.random() < dt * 0.6) {
+        if (this.getHorizontalDist(bot.pos, handler.pos) < 1.6 && !(bot.stealCd > 0) &&
+            Math.random() < dt * 0.6 * this.botSkill(bot).steal) {
             this.tryStealBall(bot);
         }
         return true;

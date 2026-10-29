@@ -18,7 +18,7 @@
  */
 
 import * as THREE from 'three';
-import { CHARACTER_PRESETS, GAME_MODES } from '../config/constants.js';
+import { CHARACTER_PRESETS, GAME_MODES, DIFFICULTY } from '../config/constants.js';
 import { createCharacterMesh } from '../character/createCharacter.js';
 import { CourtScene } from '../court/CourtScene.js';
 import { ShotMeter } from './ShotMeter.js';
@@ -49,6 +49,7 @@ export class GameEngine {
         this.isRunning = false;
         this.cameraMode = '2K'; // '2K' ou 'FOLLOW'
         this.currentMode = GAME_MODES['3v3'];
+        this.difficulty = DIFFICULTY.NORMAL; // bots adverses (BotAI.js, botSkill)
 
         // Entités Joueurs : id -> { id, team, isBot, isLocal, slotIndex, profile, mesh, pos, vel, rotY, state }
         this.entities = new Map();
@@ -245,6 +246,7 @@ export class GameEngine {
 
         this.localPlayerId = localPeerId;
         this.currentMode = GAME_MODES[lobbyState.mode] || GAME_MODES['3v3'];
+        this.difficulty = DIFFICULTY[lobbyState.difficulty] || DIFFICULTY.NORMAL;
         this.court.buildCourt(this.currentMode.isHalfCourt);
 
         this.matchRules.scoreA = 0;

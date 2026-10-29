@@ -321,6 +321,19 @@ export const CHARACTER_PRESETS = [
     }
 ];
 
+/**
+ * Niveau des bots qui jouent contre au moins un humain (choisi par l'hôte dans le salon ; les bots coéquipiers
+ * d'un humain ne changent pas). shot : réussite en plus ou en moins ; speed : vitesse ; react : défense (vitesse de
+ * replacement, sauts pour contester) ; think : hasard dans leurs choix (plus petit = meilleurs choix) ; steal :
+ * interceptions
+ */
+export const DIFFICULTY = {
+    FACILE: { label: 'Facile', shot: -0.08, speed: 0.9, react: 0.85, think: 0.5, steal: 0.5 },
+    NORMAL: { label: 'Normal', shot: 0, speed: 1, react: 1, think: 0.3, steal: 1 },
+    DIFFICILE: { label: 'Difficile', shot: 0.05, speed: 1.05, react: 1.08, think: 0.18, steal: 1.3 },
+    LEGENDE: { label: 'Légende', shot: 0.09, speed: 1.1, react: 1.15, think: 0.08, steal: 1.6 }
+};
+
 export const GAME_MODES = {
     '3v3': {
         id: '3v3',

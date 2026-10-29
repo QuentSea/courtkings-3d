@@ -10,6 +10,16 @@
 // 10 joueurs humains au maximum (5 contre 5)
 const MAX_PER_TEAM = 5;
 const MODE_SIZES = { '3v3': 3, '4v4': 4, '5v5': 5 };
+const DIFFICULTY_KEY = 'courtkings_difficulte';
+
+/** Dernier niveau des bots choisi par ce joueur (Normal par défaut) */
+function savedDifficulty() {
+    try {
+        return localStorage.getItem(DIFFICULTY_KEY) || 'NORMAL';
+    } catch {
+        return 'NORMAL';
+    }
+}
 
 export class NetworkManager {
     constructor(callbacks = {}) {
@@ -54,6 +64,7 @@ export class NetworkManager {
             roomCode: this.roomCode,
             mode,
             fillWithBots: true,
+            difficulty: savedDifficulty(),
             players: {
                 [this.localPeerId]: {
                     peerId: this.localPeerId,
@@ -337,6 +348,17 @@ export class NetworkManager {
     setFillWithBots(fill) {
         if (!this.isHost) return;
         this.lobbyState.fillWithBots = fill;
+        this.broadcastLobbyState();
+        this.notifyLobbyUpdated();
+    }
+
+    /** Niveau des bots adverses (constants.js, DIFFICULTY) : l'hôte choisit, gardé dans son navigateur */
+    setDifficulty(level) {
+        if (!this.isHost) return;
+        this.lobbyState.difficulty = level;
+        try {
+            localStorage.setItem(DIFFICULTY_KEY, level);
+        } catch { /* pas de sauvegarde : le choix tient jusqu'à la fermeture */ }
         this.broadcastLobbyState();
         this.notifyLobbyUpdated();
     }

@@ -145,7 +145,7 @@ export const BallMethods = {
                 const interceptRadius = isActivelyDefending ? 0.78 : 0.48;
 
                 if (d <= interceptRadius && this.ball.pos.y <= ent.pos.y + 2.25) {
-                    const interceptProb = ent.isLocal ? 0.42 : (0.14 + (defStat / 99) * 0.16);
+                    const interceptProb = ent.isLocal ? 0.42 : (0.14 + (defStat / 99) * 0.16) * this.botSkill(ent).steal;
                     if (Math.random() < interceptProb) {
                         this.giveBallTo(ent.id, true);
                         this.showRuleAlert(`⚡ PASSE COUPÉE PAR ${ent.profile.playerName} !`);
@@ -212,7 +212,8 @@ export const BallMethods = {
         const contest = this.calculateContestFactor(dunker);
 
         // Le Dunk a une probabilité très élevée (85% à 98%, ou "Poster Dunk" même face à un défenseur si Finition est haute)
-        const dunkProb = Math.max(0.55, Math.min(0.98, 0.78 + ((finishStat - 60) / 39) * 0.22 - contest * 0.22));
+        const dunkProb = Math.max(0.55, Math.min(0.98, 0.78 + ((finishStat - 60) / 39) * 0.22 +
+            this.botSkill(dunker).shot / 2 - contest * 0.22));
         const isMake = Math.random() <= dunkProb;
         // Faute sur le dunkeur (Fouls.js) ; alley-oop = dunk sur une passe lobée (Moves.js)
         const foulerId = this.rollShootingFoul(dunker, true);

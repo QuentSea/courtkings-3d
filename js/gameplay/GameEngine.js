@@ -516,8 +516,8 @@ export class GameEngine {
         this.updateTactics(dt);
         this.updateTacticsUI();
 
-        // 0 bis. Lire l'état de la Manette (si connectée)
-        const padInput = this.pollGamepadInput();
+        // 0 bis. Lire l'état de la Manette (si connectée), sinon les commandes tactiles (TouchControls.js)
+        const padInput = this.pollGamepadInput() || this.touch?.input() || null;
 
         // 1. Mise à jour du joueur local (Clavier + Manette)
         const me = this.getLocalEntity();

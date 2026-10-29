@@ -174,7 +174,7 @@ export const ControlsMethods = {
 
     /** Sprint tenu (clavier ou manette) : décide dunk ou lay-up près du cercle */
     isSprintHeld() {
-        return this.isKeyHeld('sprint') || !!this.padSprint;
+        return this.isKeyHeld('sprint') || !!this.padSprint || !!this.touch?.held.has('sprint');
     },
 
     handleActionAlleyOop(me) {

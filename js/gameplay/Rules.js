@@ -24,6 +24,7 @@ export const RulesMethods = {
         const half = Math.ceil((this.currentMode.targetScore || 30) / 2);
         if (Math.max(this.matchRules.scoreA, this.matchRules.scoreB) >= half) {
             this.matchRules.sidesSwapped = true;
+            this.matchRules.teamFouls = { A: 0, B: 0 }; // fautes d'équipe remises à zéro (Fouls.js)
             this.pendingHalftimeAlert = true;
         }
     },
@@ -37,7 +38,11 @@ export const RulesMethods = {
         this.matchRules.shotClock = SHOT_CLOCK;
         this.matchRules.shotClockStopped = false;
         this.matchRules.deadBall = false; // la balle redevient vivante
-        if (this.isAuthority) this.matchRules.checkBallSeq++;
+        this.matchRules.freeThrow = null;
+        if (this.isAuthority) {
+            this.matchRules.checkBallSeq++;
+            this.pickPossessionPlay(offenseTeam); // système d'attaque (Tactics.js)
+        }
 
         const isHalf = this.currentMode.isHalfCourt;
         const offenseSpots = [
@@ -90,6 +95,8 @@ export const RulesMethods = {
             ent.screenedTimer = 0;
             ent.pnr = null;
             ent.switchManId = null;
+            ent.boxOutTimer = 0;
+            ent.boxedTimer = 0;
         }
 
         if (ballCarrier) {

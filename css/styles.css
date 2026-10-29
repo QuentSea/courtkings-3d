@@ -1393,3 +1393,23 @@ kbd {
     font-weight: 700;
     color: var(--accent-gold);
 }
+
+/* Tactiques en cours et fautes d'équipe (Tactics.js), sous le tableau de score */
+.hud-tactics {
+    position: absolute;
+    top: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    max-width: calc(100% - 32px);
+    padding: 4px 14px;
+    border-radius: 99px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #cbd5e1;
+    font-size: 0.74rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+.hud-tactics:empty { display: none; }

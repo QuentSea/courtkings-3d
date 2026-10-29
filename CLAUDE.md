@@ -34,14 +34,18 @@
 | `js/gameplay/BotAI.js` | IA des bots (`updateBotAI`, `moveEntityTowards`) |
 | `js/gameplay/Camera.js` | Caméra 2K / Suivi, `viewFlipped` |
 | `js/gameplay/NetSync.js` | État du monde, joueurs distants, actions reçues, départs |
+| `js/gameplay/Fouls.js` | Fautes (sur tir, en défense, bonus) et lancers francs |
+| `js/gameplay/Moves.js` | Lay-up, euro step, alley-oop, step-back, fadeaway, box-out, rebond offensif |
+| `js/gameplay/Tactics.js` | Défense individuelle / zone / pressing, systèmes d'attaque, menus du HUD |
 | `js/network/NetworkManager.js` | PeerJS + BroadcastChannel, salons par code (`BASKET-42`, ou `?room=BASKET-42`) |
 
 ## Gameplay (résumé)
 
 - Postes : modifient taille 3D, vitesse et plafonds des 4 attributs (`shooting`, `defense`, `dribble`,
   `finishing`), base 60, 80 points à répartir, max 99 selon le poste.
-- Clavier : ZQSD/flèches bouger, E passe, Espace (maintenir) tir, R saut/contre, C crossover, F interception,
-  Shift sprint/posture, V caméra. Manette : A passe, X tir, Y saut, B crossover/interception, RT sprint, LT posture.
+- Clavier : ZQSD/flèches bouger, E passe, Espace (maintenir) tir (près du cercle : lay-up, + Shift : dunk), T alley-oop,
+  R saut/contre, C crossover (près du cercle : euro step), F interception, Shift sprint/posture (box-out pendant un tir
+  adverse), B écran, V caméra. Manette : A passe, X tir, Y saut, B crossover/interception, RT sprint, LT posture.
 - Dunk si tir à moins de 3,55–4,25 m (selon `finishing`). Interception sur porteur 14–32 %.
 - Demi-terrain : check ball en haut de la raquette, « take back » derrière l'arc après rebond défensif ou interception.
 - IA : anti-collision 1,05 m (`resolvePlayerCollisions`), coéquipiers `CUT_BASKET` / `POP_OUT` / `PERIMETER`,
@@ -234,8 +238,40 @@
      casse la règle des 14 s.
   8. Supprimés : `isCheckBall`, `targetedTeammateId`, `matchStarted` (jamais lus).
   9. Salon : seuls les joueurs nouveaux ou modifiés sont recréés (`lobbyMeshById`, clé = profil + équipe).
-     - À faire : alley-oop, lay-up, euro step, step-back, fadeaway, rebond offensif, box-out ; fautes et lancers
-       francs, chrono des 24 s, fin de match ; défense de zone/individuelle, pressing, systèmes d'attaque.
+     - ✅ **Toutes les actions et tactiques restantes** (29 octobre 2026, « Tout » demandé par le joueur) :
+       - **Fautes et lancers francs** — `js/gameplay/Fouls.js` : faute sur tir tirée au sort par l'hôte au départ du tir
+         ou du lay-up (`rollShootingFoul` dans `launchShotBall`, `fouledBy` dans `pendingShotOutcome`) et à la fin du
+         dunk (`finishDunkSlam`) → 2/3 lancers si raté, 1 si réussi (« and one » : `scorePoints(…, then)` remplace la
+         remise en jeu) ; tir contré après la faute : lancers gardés (`foulOnBlockedShot`). Faute en voulant
+         intercepter (`rollReachInFoul`, événement `FOUL` pour un invité) → remise en jeu, ou 2 lancers dès la 5e faute
+         d'équipe par mi-temps (7e par match en demi-terrain, `bonusFouls`). Série : `matchRules.freeThrow`
+         {shooterId, team, total, index}, `setupFreeThrow` (joueurs le long de la raquette, `checkBallSeq++` : les
+         invités se placent aussi), balle morte, jauge sans contestation à 4,6 m (`FT_DISTANCE`), bots seuls
+         (`updateFreeThrow`, ~70–81 %). Le dernier lancer (`freeThrow.last`) remet la balle en jeu.
+       - **Gestes** — `js/gameplay/Moves.js` : près du cercle (`finishRange`) Espace = lay-up, Shift + Espace = dunk ;
+         C près du cercle = euro step (courbe par `dunkMid`, contestation ÷ 2) ; T / Y = alley-oop (`launchAlleyOop` :
+         passe lobée + envol du receveur, `ball.alleyOop`, événement `ALLEY_OOP` relayé par l'hôte quand le receveur
+         est un invité ; sans ballon : le demander au bot porteur) ; tirer en reculant = step-back (> 5,2 m, pas de
+         0,95 m) ou fadeaway (dérive arrière, contestation × 0,55), fenêtre verte un peu plus petite (`extraPenalty`).
+         Finitions communes : `beginFinish` / `stepFinish` (dunk, lay-up lâché à 60 % du saut, `finishLayup`).
+         Contre sur un porteur : **un seul essai par saut** (`blockTried`, avant : un tirage à chaque image).
+       - **Rebonds** : box-out (bots défenseurs pendant un tir, joueur local en tenant la défense ; `boxOutTimer`,
+         `resolveBoxOutCollision`, l'adversaire « enfermé » a 55 % de portée au rebond), les grands attaquants vont
+         au rebond offensif (`botReboundMove`), un bot qui prend le ballon à moins de 2,5 m finit tout de suite.
+       - **Tactiques** — `js/gameplay/Tactics.js` : défense individuelle / zone (`ZONES`, le plus proche sort sur le
+         porteur) / pressing (prise à deux dans son camp ou loin du cercle, interceptions des bots, `stealCd` par
+         joueur) ; attaque coupes / pick and roll / isolation / jeu au poste (`plays`, tiré au sort à chaque possession
+         en « Auto »). « Auto » en défense : pressing si menée de 5, zone après 3 paniers adverses près du cercle,
+         individuelle après 2 tirs à 3 pts. Menus `#hud-offense` / `#hud-defense` (événement `TACTIC` pour un invité,
+         son équipe seulement), ligne `#hud-tactics` (tactiques et fautes d'équipe).
+       - Feuille de match : colonnes LF (lancers) et F (fautes), lignes « faute », « lay-up », « alley-oop ».
+       - Réseau : `teamFouls`, `freeThrow`, `tactics`, `defenseNow`, `plays` dans `rules` ; `alleyOop` dans `ball` ;
+         `box` dans PLAYER_STATE ; `DUNK_START` porte `kind` et `mid`.
+       - Testé : 10 tests (`node --test`, dont 3 sur les fautes) ; 5v5 de bots (fautes, and one, lancers, zone,
+         pressing, 12 combinaisons de systèmes, aucune erreur) ; joueur local (3 lancers à la jauge, lay-up, step-back
+         à 3 pts, euro step, alley-oop + passe décisive, menus) ; hôte + invité (tactique de l'invité appliquée,
+         2 lancers de l'invité, alley-oop demandé par l'invité au bot : 2 pts comptés chez l'hôte).
+       - Pas fait : exclusion à 5/6 fautes personnelles, règle des 8 s, retour en zone.
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

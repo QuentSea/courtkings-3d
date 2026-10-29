@@ -20,6 +20,7 @@ export const NetSyncMethods = {
         if (packet.state) {
             ent.state = packet.state;
         }
+        ent.boxOutTimer = packet.box ? 0.15 : 0; // box-out de l'invité (collisions chez l'hôte, Moves.js)
     },
 
     /**
@@ -53,6 +54,7 @@ export const NetSyncMethods = {
                 flightDuration: b.flightDuration,
                 flightArcHeight: b.flightArcHeight,
                 passTargetId: b.passTargetId,
+                alleyOop: !!b.alleyOop,
                 pendingShotOutcome: b.pendingShotOutcome
             },
             rules: {
@@ -70,7 +72,13 @@ export const NetSyncMethods = {
                 goldenPoint: this.matchRules.goldenPoint,
                 matchOver: this.matchRules.matchOver,
                 winner: this.matchRules.winner,
-                endReason: this.matchRules.endReason
+                endReason: this.matchRules.endReason,
+                // Fautes et lancers francs (Fouls.js), tactiques (Tactics.js)
+                teamFouls: this.matchRules.teamFouls,
+                freeThrow: this.matchRules.freeThrow,
+                tactics: this.matchRules.tactics,
+                defenseNow: this.matchRules.defenseNow,
+                plays: this.matchRules.plays
             },
             alert: { seq: this.alertSeq, text: this.lastAlertText },
             // Feuille de match : seulement une fois le match fini, 2 fois par seconde (paquet plus lourd)
@@ -97,7 +105,13 @@ export const NetSyncMethods = {
         // Côtés d'abord : la remise en jeu ci-dessous place les joueurs selon le panier attaqué
         if (rules) this.matchRules.sidesSwapped = !!rules.sidesSwapped;
         if (rules && rules.checkBallSeq !== this.matchRules.checkBallSeq) {
-            this.resetPositionsForCheckBall(rules.possessionTeam);
+            // Lancer franc (Fouls.js) ou remise en jeu
+            if (rules.freeThrow) {
+                this.matchRules.freeThrow = rules.freeThrow;
+                this.setupFreeThrow();
+            } else {
+                this.resetPositionsForCheckBall(rules.possessionTeam);
+            }
             this.matchRules.checkBallSeq = rules.checkBallSeq;
         }
 
@@ -126,6 +140,7 @@ export const NetSyncMethods = {
             b.flightDuration = nb.flightDuration;
             b.flightArcHeight = nb.flightArcHeight;
             b.passTargetId = nb.passTargetId;
+            b.alleyOop = !!nb.alleyOop;
             b.pendingShotOutcome = nb.pendingShotOutcome;
         }
 
@@ -151,6 +166,11 @@ export const NetSyncMethods = {
             r.matchOver = !!rules.matchOver;
             r.winner = rules.winner;
             r.endReason = rules.endReason || '';
+            if (rules.teamFouls) r.teamFouls = rules.teamFouls;
+            r.freeThrow = rules.freeThrow || null;
+            if (rules.tactics) r.tactics = rules.tactics;
+            if (rules.defenseNow) r.defenseNow = rules.defenseNow;
+            if (rules.plays) r.plays = rules.plays;
             if (ended) {
                 if (this.shotMeter?.active) this.shotMeter.cancel();
                 this.showMatchEnd();
@@ -199,6 +219,7 @@ export const NetSyncMethods = {
             // Contre arrivé en retard (ballon déjà retombé ou ramassé) : l'hôte l'ignore
             if (this.isAuthority && !this.canStillBeBlocked(blocker)) return;
             if (this.isAuthority) this.onBlock(payload.blockerId, this.ball.pendingShotOutcome?.shooterId || this.ball.holderId);
+            const fouledShot = this.ball.pendingShotOutcome;
             this.ball.holderId = null;
             this.ball.pendingShotOutcome = null;
             this.ball.state = 'LOOSE';
@@ -207,6 +228,7 @@ export const NetSyncMethods = {
             if (blocker) {
                 this.showRuleAlert(`🚫 CONTRE ÉNORME DE ${blocker.profile.playerName} !`);
             }
+            this.foulOnBlockedShot(fouledShot); // faute déjà sifflée sur ce tir (Fouls.js)
         } else if (eventName === 'STEAL') {
             const stealer = this.entities.get(payload.stealerId);
             // Interception arrivée en retard (tir parti, balle morte, ballon déjà à son équipe) : ignorée
@@ -223,14 +245,39 @@ export const NetSyncMethods = {
             const dunker = this.entities.get(payload.playerId);
             // Chez un invité, le dunk d'un autre est déjà visible par l'état du monde de l'hôte
             if (dunker && this.isAuthority) {
-                dunker.isDunking = true;
-                dunker.dunkStartPos = new THREE.Vector3(payload.startPos.x, 0, payload.startPos.z);
-                dunker.dunkTargetPos = new THREE.Vector3(payload.targetPos.x, 0, payload.targetPos.z);
-                dunker.dunkHoop = this.getAttackingHoopForTeam(dunker.team);
-                dunker.dunkTimer = 0;
-                dunker.dunkDuration = payload.duration || 0.5;
-                dunker.state = 'DUNK';
+                this.beginFinish(
+                    dunker,
+                    this.getAttackingHoopForTeam(dunker.team),
+                    new THREE.Vector3(payload.startPos.x, 0, payload.startPos.z),
+                    new THREE.Vector3(payload.targetPos.x, 0, payload.targetPos.z),
+                    payload.mid ? new THREE.Vector3(payload.mid.x, 0, payload.mid.z) : null,
+                    payload.kind === 'LAYUP' ? 'LAYUP' : 'DUNK',
+                    Math.max(0.3, Math.min(1.1, payload.duration || 0.5))
+                );
             }
+        } else if (eventName === 'ALLEY_OOP') {
+            const passer = this.entities.get(payload.fromId);
+            const receiver = this.entities.get(payload.toId);
+            if (!passer || !receiver || passer.team !== receiver.team) return;
+            if (this.isAuthority) {
+                // L'hôte vérifie que le passeur a encore le ballon, puis lance (et relaie au receveur invité)
+                if (this.ball.holderId !== passer.id || this.ball.state !== 'HELD') return;
+                this.launchAlleyOop(passer, receiver, false);
+            } else if (receiver.isLocal && !receiver.isDunking) {
+                // Invité receveur : son joueur s'envole chez lui (le ballon suit l'état du monde de l'hôte)
+                this.launchAlleyOop(passer, receiver, false);
+            }
+        } else if (eventName === 'FOUL') {
+            // Faute d'un invité en voulant prendre le ballon : l'hôte la siffle si le porteur a encore le ballon
+            const fouler = this.entities.get(payload.foulerId);
+            if (!this.isAuthority || !fouler || packet.senderId !== fouler.id) return;
+            if (this.ball.state === 'HELD' && this.ball.holderId === payload.victimId && this.canStillBeStolen(fouler)) {
+                this.commitFoul(fouler.id, payload.victimId);
+            }
+        } else if (eventName === 'TACTIC') {
+            // Tactique choisie par un invité : seulement pour sa propre équipe
+            const player = this.entities.get(packet.senderId);
+            if (this.isAuthority && player) this.applyTactics(player.team, payload.def, payload.off, player);
         }
     }
 };

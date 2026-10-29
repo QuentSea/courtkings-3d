@@ -5,6 +5,7 @@
 
 import { POSITIONS } from '../config/constants.js';
 import { SCREENED_SPEED, SCREEN_MIN_TIME } from './Screens.js';
+import { FT_DISTANCE } from './Fouls.js';
 
 export const ControlsMethods = {
     bindGamepadEvents() {
@@ -57,7 +58,12 @@ export const ControlsMethods = {
                 this.handleActionPassOrCall(me);
             }
 
-            // C : Crossover rapide
+            // T : Alley-oop (avec ballon : passe lobée au coéquipier visé ; sans : le demander au bot porteur)
+            if (code === 'KeyT' && !e.repeat) {
+                this.handleActionAlleyOop(me);
+            }
+
+            // C : Crossover rapide (près du cercle : euro step)
             if (code === 'KeyC' && !e.repeat) {
                 this.triggerCrossover(me);
             }
@@ -94,27 +100,49 @@ export const ControlsMethods = {
 
     handleActionShootOrBlockPress(me) {
         if (this.ball.holderId === me.id) {
+            if (me.isDunking || this.shotMeter.active || this.ball.state !== 'HELD') return;
+            // Lancer franc : jauge sans contestation ni saut (Fouls.js)
+            if (this.isFreeThrowShooter(me)) {
+                this.shotMeter.startCharge(me.profile.attributes, FT_DISTANCE, 0);
+                me.state = 'SHOOT';
+                return;
+            }
             if (this.matchRules.needsTakeBack && this.currentMode.isHalfCourt) {
                 this.showRuleAlert('RESSORS DERRIÈRE LA LIGNE DES 3 PTS !');
                 return;
             }
             const hoop = this.getAttackingHoopForTeam(me.team);
             const dist = this.getHorizontalDist(me.pos, hoop.rimPos);
-            const finishStat = me.profile.attributes?.finishing || 80;
-            // Portée de Dunk : jusqu'à 3.85m du panier (et jusqu'à 4.25m pour un spécialiste Finition) !
-            const maxDunkRange = 3.55 + ((finishStat - 60) / 39) * 0.70;
 
-            if (dist <= maxDunkRange) {
-                this.startDunkDrive(me, hoop, dist);
+            // Près du cercle (3,55 à 4,25 m selon la finition) : dunk en sprintant, lay-up sinon (Moves.js)
+            if (dist <= this.finishRange(me)) {
+                this.startDunkDrive(me, hoop, dist, { kind: this.isSprintHeld() ? 'DUNK' : 'LAYUP' });
                 return;
             }
 
-            const contest = this.calculateContestFactor(me);
-            this.shotMeter.startCharge(me.profile.attributes, dist, contest);
+            // En reculant : step-back (loin) ou fadeaway (près), Moves.js
+            const move = this.applyShotMove(me, hoop, dist);
+            me.shotContestMul = move ? move.contestMul : 1;
+            const shotDist = this.getHorizontalDist(me.pos, hoop.rimPos);
+            const contest = this.calculateContestFactor(me) * me.shotContestMul;
+            this.shotMeter.startCharge(me.profile.attributes, shotDist, contest, move ? move.penalty : 0);
             me.state = 'SHOOT';
             me.vel.y = 3.6;
         } else {
             this.triggerJumpBlock(me);
+        }
+    },
+
+    /** Sprint tenu (clavier ou manette) : décide dunk ou lay-up près du cercle */
+    isSprintHeld() {
+        return !!(this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.padSprint);
+    },
+
+    handleActionAlleyOop(me) {
+        if (this.ball.holderId === me.id) {
+            if (this.ball.state === 'HELD' && !me.isDunking && !this.isFreeThrowShooter(me)) this.tryAlleyOop(me);
+        } else {
+            this.requestAlleyOop(me);
         }
     },
 
@@ -228,9 +256,14 @@ export const ControlsMethods = {
                 this.handleActionScreen(me);
             }
 
-            // Bouton Y / Triangle (3) : Saut / Contre / Rebond
+            // Bouton Y / Triangle (3) : alley-oop (porteur, ou coéquipier d'un bot porteur), sinon Saut / Contre / Rebond
             if (justPressed(3)) {
-                this.triggerJumpBlock(me);
+                const holder = this.entities.get(this.ball.holderId);
+                if (holder && holder.team === me.team && this.ball.state === 'HELD' && (holder === me || holder.isBot)) {
+                    this.handleActionAlleyOop(me);
+                } else {
+                    this.triggerJumpBlock(me);
+                }
             }
 
             // Bouton Back / Select (8) : Changer Caméra
@@ -238,6 +271,8 @@ export const ControlsMethods = {
                 this.toggleCameraMode();
             }
         }
+
+        this.padSprint = isPressed(7) || isPressed(5);
 
         // Sauvegarder l'état des boutons pour la frame suivante
         const nextButtons = {};
@@ -263,6 +298,17 @@ export const ControlsMethods = {
         if (this.shotMeter.active) {
             const hoop = this.getAttackingHoopForTeam(me.team);
             me.rotY = Math.atan2(hoop.rimPos.x - me.pos.x, hoop.rimPos.z - me.pos.z);
+            // Fadeaway : le tireur part en arrière pendant son saut (Moves.js)
+            if (me.shotMove === 'FADE' && me.pos.y > 0) {
+                me.pos.addScaledVector(me.fadeDir, 1.6 * dt);
+                this.clampToCourtBounds(me.pos);
+            }
+            return;
+        }
+        // Lancers francs : chacun reste à sa place
+        if (this.matchRules.freeThrow) {
+            this.lastMoveDir = null;
+            if (me.pos.y <= 0.05) me.state = this.ball.holderId === me.id ? 'DRIBBLE' : 'IDLE';
             return;
         }
 
@@ -301,6 +347,8 @@ export const ControlsMethods = {
 
         const isSprinting = this.keys['ShiftLeft'] || this.keys['ShiftRight'] || (padInput && padInput.sprint);
         const isDefending = this.keys['ShiftLeft'] || this.keys['KeyF'] || (padInput && padInput.defend);
+        // Posture défensive pendant un tir adverse : box-out (Moves.js)
+        this.updateLocalBoxOut(me, isDefending);
         const screened = me.screenedTimer > 0 ? SCREENED_SPEED : 1;
         const speed = 5.2 * posData.baseSpeed * attrSpeedMod * (isSprinting ? 1.25 : 1.0) * screened;
 
@@ -324,10 +372,12 @@ export const ControlsMethods = {
             this.clampToCourtBounds(me.pos);
 
             me.rotY = Math.atan2(normX, normZ);
+            this.lastMoveDir = { x: normX, y: normZ }; // step-back / fadeaway : tirer en reculant
             if (me.pos.y <= 0.05) {
                 me.state = hasBall ? 'DRIBBLE' : 'RUN';
             }
         } else {
+            this.lastMoveDir = null;
             if (me.pos.y > 0.05) {
                 me.state = hasBall ? 'SHOOT' : 'CONTEST';
             } else if (!hasBall && isDefending) {

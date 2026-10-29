@@ -134,13 +134,17 @@ export const ScreenMethods = {
         if (this.pnrCooldown > 0) return;
         this.pnrCooldown = 1;
         const handler = this.ball.holderId ? this.entities.get(this.ball.holderId) : null;
-        if (!handler || this.ball.state !== 'HELD' || this.matchRules.needsTakeBack) return;
+        if (!handler || this.ball.state !== 'HELD' || this.matchRules.needsTakeBack || this.matchRules.freeThrow) return;
         if ([...this.entities.values()].some(e => e.pnr)) return;
         const dist = this.getHorizontalDist(handler.pos, this.getAttackingHoopForTeam(handler.team).rimPos);
         if (dist < 4.5 || dist > 10) return;
-        const chance = handler.isBot ? 0.35 : 0.12;
+        // Système d'attaque (Tactics.js) : souvent en « pick and roll », jamais en isolation ni au poste
+        const play = this.matchRules.plays?.[handler.team] || 'MOTION';
+        if (play === 'ISO' || play === 'POST') return;
+        const often = play === 'PNR';
+        const chance = handler.isBot ? (often ? 0.8 : 0.35) : (often ? 0.3 : 0.12);
         if (Math.random() < chance && this.startPickAndRoll(handler)) {
-            this.pnrCooldown = 8 + Math.random() * 5;
+            this.pnrCooldown = often ? 4 + Math.random() * 2 : 8 + Math.random() * 5;
         }
     },
 

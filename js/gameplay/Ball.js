@@ -13,6 +13,7 @@ export const BallMethods = {
         this.ball.state = 'PASS';
         this.ball.passTargetId = toEnt.id;
         this.ball.passFromId = fromEnt.id; // passes décisives et interceptions (feuille de match)
+        this.ball.alleyOop = false;        // passe lobée : posé ensuite par launchAlleyOop (Moves.js)
         this.ball.flightStart.copy(fromEnt.pos).add(new THREE.Vector3(0, 1.35, 0));
         this.ball.flightTarget.copy(toEnt.pos).add(new THREE.Vector3(0, 1.35, 0));
         this.ball.flightTime = 0;
@@ -45,9 +46,21 @@ export const BallMethods = {
         this.ball.flightArcHeight = Math.max(1.2, dist * 0.34);
         // Chrono de tir arrêté jusqu'au prochain porteur (24 s s'il change d'équipe, 14 s mini sinon)
         this.matchRules.shotClockStopped = true;
-        if (this.isAuthority) this.onShotTaken(shooter, !!outcome.isThreePointer);
+        // Lancer franc (Fouls.js) : le dernier de la série remet la balle en jeu (rebond)
+        const ft = this.isFreeThrowShooter(shooter) ? this.matchRules.freeThrow : null;
+        const freeThrow = ft ? { index: ft.index, total: ft.total, last: ft.index >= ft.total } : null;
+        if (freeThrow?.last) {
+            this.matchRules.freeThrow = null;
+            this.matchRules.deadBall = false;
+        }
+        if (this.isAuthority) this.onShotTaken(shooter, !!outcome.isThreePointer, !!freeThrow);
+        // Faute sur le tireur (hôte) : sifflée tout de suite, lancers francs une fois le tir retombé
+        const fouledBy = this.isAuthority && !freeThrow ? this.rollShootingFoul(shooter) : null;
+        if (fouledBy) this.showRuleAlert(`🟨 FAUTE SUR LE TIR DE ${shooter.profile.playerName} !`);
         this.ball.pendingShotOutcome = {
             ...outcome,
+            freeThrow,
+            fouledBy,
             shooterId: shooter.id,
             shooterTeam: shooter.team,
             shooterName: shooter.profile.playerName
@@ -93,7 +106,8 @@ export const BallMethods = {
             // Suivre dynamiquement la position du coéquipier receveur pendant le vol de la passe
             const receiver = this.entities.get(this.ball.passTargetId);
             if (receiver) {
-                this.ball.flightTarget.copy(receiver.pos).add(new THREE.Vector3(0, 1.35, 0));
+                // Alley-oop : le ballon va dans les mains levées du receveur en plein vol
+                this.ball.flightTarget.copy(receiver.pos).add(new THREE.Vector3(0, this.ball.alleyOop ? 2.3 : 1.35, 0));
             }
             const t = Math.min(1.0, this.ball.flightTime / this.ball.flightDuration);
             this.ball.pos.lerpVectors(this.ball.flightStart, this.ball.flightTarget, t);
@@ -151,7 +165,7 @@ export const BallMethods = {
             for (const ent of this.entities.values()) {
                 // Balle morte (panier, 24 s, fin) : personne ne la ramasse avant la remise en jeu
                 if (!this.isAuthority || this.matchRules.deadBall) break;
-                if (this.getHorizontalDist(ent.pos, this.ball.pos) < 0.85 && this.ball.pos.y < 1.8) {
+                if (this.getHorizontalDist(ent.pos, this.ball.pos) < 0.85 * this.reboundReachFactor(ent) && this.ball.pos.y < 1.8) {
                     const isDefChange = this.matchRules.possessionTeam !== ent.team;
                     this.giveBallTo(ent.id, isDefChange);
                     break;
@@ -183,6 +197,10 @@ export const BallMethods = {
         // Le Dunk a une probabilité très élevée (85% à 98%, ou "Poster Dunk" même face à un défenseur si Finition est haute)
         const dunkProb = Math.max(0.55, Math.min(0.98, 0.78 + ((finishStat - 60) / 39) * 0.22 - contest * 0.22));
         const isMake = Math.random() <= dunkProb;
+        // Faute sur le dunkeur (Fouls.js) ; alley-oop = dunk sur une passe lobée (Moves.js)
+        const foulerId = this.rollShootingFoul(dunker, true);
+        const alleyOop = !!dunker.alleyOopFrom;
+        dunker.alleyOopFrom = null;
 
         if (isMake) {
             // Le ballon est violemment écrasé à travers le filet vers le parquet
@@ -192,14 +210,16 @@ export const BallMethods = {
             this.ball.vel.set((Math.random() - 0.5) * 1.2, -7.5, (Math.random() - 0.5) * 1.2);
 
             const isPoster = contest > 0.35;
-            const title = isPoster ? '💥 POSTER DUNK MONSTRUEUX (+2 PTS) !' : '💥 SLAM DUNK (+2 PTS) !';
-            this.showRuleAlert(`${title} (${dunker.profile.playerName})`);
+            const title = alleyOop ? '🚀 ALLEY-OOP (+2 PTS) !'
+                : (isPoster ? '💥 POSTER DUNK MONSTRUEUX (+2 PTS) !' : '💥 SLAM DUNK (+2 PTS) !');
+            this.showRuleAlert(`${title} (${dunker.profile.playerName})${foulerId ? ' + FAUTE !' : ''}`);
             if (this.shotMeter && dunker.isLocal) {
-                this.shotMeter.showFeedback(isPoster ? 'POSTER DUNK !' : 'SLAM DUNK !', Math.round(contest * 100), 'feedback-green', true);
+                this.shotMeter.showFeedback(alleyOop ? 'ALLEY-OOP !' : (isPoster ? 'POSTER DUNK !' : 'SLAM DUNK !'), Math.round(contest * 100), 'feedback-green', true);
             }
-            // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js)
+            // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js) ; « and one » s'il y a faute
             this.onDunkAttempt(dunker, true);
-            this.scorePoints(dunker.team, 2, dunker.id, 'dunk');
+            this.scorePoints(dunker.team, 2, dunker.id, alleyOop ? 'alleyoop' : 'dunk',
+                foulerId ? () => this.commitFoul(foulerId, dunker.id, { shotPts: 2, made: true }) : null);
         } else {
             // Dunk raté sur l'arceau (Rim Out) : rebond, le chrono de tir repart à 14 s si l'attaque le reprend
             this.matchRules.shotClockStopped = true;
@@ -208,9 +228,13 @@ export const BallMethods = {
             this.ball.state = 'LOOSE';
             this.ball.pos.copy(hoop.rimPos).add(new THREE.Vector3(0, 0.25, 0));
             this.ball.vel.set((Math.random() - 0.5) * 4.5, 4.2, (this.ball.pos.z < 0 ? 1 : -1) * 3.2);
-            this.showRuleAlert(`DUNK MANQUÉ SUR L'ARCEAU ! REBOND !`);
             if (this.shotMeter && dunker.isLocal) {
                 this.shotMeter.showFeedback('DUNK CONTESTÉ (RIM OUT)', Math.round(contest * 100), 'feedback-red', false);
+            }
+            if (foulerId) {
+                this.commitFoul(foulerId, dunker.id, { shotPts: 2, made: false });
+            } else {
+                this.showRuleAlert(`DUNK MANQUÉ SUR L'ARCEAU ! REBOND !`);
             }
         }
     },
@@ -218,6 +242,9 @@ export const BallMethods = {
     resolveShotAtRim() {
         const outcome = this.ball.pendingShotOutcome;
         if (!outcome) return;
+        const ft = outcome.freeThrow;          // lancer franc (Fouls.js)
+        const foulerId = outcome.fouledBy;     // faute sur le tireur : lancers francs après le tir
+        const pts = ft ? 1 : (outcome.isThreePointer ? 3 : 2);
 
         if (outcome.isMake) {
             // Le ballon tombe à travers le filet : sinon le panier serait recompté à chaque image
@@ -227,15 +254,21 @@ export const BallMethods = {
             this.ball.pos.copy(this.ball.flightTarget).add(new THREE.Vector3(0, -0.2, 0));
             this.ball.vel.set(0, -3.5, 0);
 
-            const pts = outcome.isThreePointer ? 3 : 2;
-            const label = outcome.isThreePointer
+            let label;
+            if (ft) label = `🎯 LANCER FRANC RÉUSSI (${ft.index}/${ft.total})`;
+            else if (outcome.kind === 'layup') label = '🏀 LAY-UP RÉUSSI (+2 PTS) !';
+            else label = outcome.isThreePointer
                 ? '🔥 PANIER À 3 POINTS (HORS CERCLE : +3 PTS) !'
                 : '🏀 PANIER À 2 POINTS (DANS LE CERCLE : +2 PTS) !';
-            this.showRuleAlert(`${label} (${outcome.shooterName})`);
-            // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js)
-            this.scorePoints(outcome.shooterTeam, pts, outcome.shooterId);
+            this.showRuleAlert(`${label} (${outcome.shooterName})${foulerId ? ' + FAUTE !' : ''}`);
+            // Score, fin de match ou mi-temps, puis remise en jeu (Clock.js) ;
+            // « and one » après une faute, lancer suivant au milieu d'une série
+            let then = null;
+            if (foulerId) then = () => this.commitFoul(foulerId, outcome.shooterId, { shotPts: pts, made: true });
+            else if (ft && !ft.last) then = () => this.nextFreeThrow();
+            this.scorePoints(outcome.shooterTeam, pts, outcome.shooterId, ft ? 'ft' : (outcome.kind || 'shot'), then);
         } else {
-            this.onShotMissed(outcome);
+            if (ft) this.onFreeThrowMissed(outcome); else this.onShotMissed(outcome);
             this.ball.pendingShotOutcome = null;
             this.ball.state = 'LOOSE';
             this.ball.vel.set(
@@ -243,7 +276,14 @@ export const BallMethods = {
                 3.2,
                 (this.ball.pos.z < 0 ? 1 : -1) * (1.8 + Math.random() * 2.2)
             );
-            this.showRuleAlert('REBOND EN JEU !');
+            if (foulerId) {
+                this.commitFoul(foulerId, outcome.shooterId, { shotPts: pts, made: false });
+            } else if (ft && !ft.last) {
+                this.showRuleAlert(`LANCER FRANC MANQUÉ (${ft.index}/${ft.total})`);
+                this.nextFreeThrow();
+            } else {
+                this.showRuleAlert('REBOND EN JEU !');
+            }
         }
     }
 };

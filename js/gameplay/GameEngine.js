@@ -12,6 +12,9 @@
  * - Screens.js : Écrans (« block ») et pick and roll, défenseurs bloqués, changements de joueur (switch).
  * - Clock.js : Chrono de tir (24 s), temps de match, fin de match et écran de résultat.
  * - MatchSheet.js : Feuille de match (statistiques de chaque joueur, déroulé des actions).
+ * - Fouls.js : Fautes (sur tir, en défense, bonus d'équipe) et lancers francs.
+ * - Moves.js : Lay-up, euro step, alley-oop, step-back, fadeaway, box-out et rebond offensif.
+ * - Tactics.js : Défense individuelle, zone ou pressing ; systèmes d'attaque (coupes, pick and roll, isolation, poste).
  */
 
 import * as THREE from 'three';
@@ -31,6 +34,9 @@ import { NetSyncMethods } from './NetSync.js';
 import { ScreenMethods } from './Screens.js';
 import { ClockMethods } from './Clock.js';
 import { MatchSheetMethods } from './MatchSheet.js';
+import { FoulMethods } from './Fouls.js';
+import { MoveMethods } from './Moves.js';
+import { TacticMethods } from './Tactics.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -90,7 +96,14 @@ export class GameEngine {
             matchOver: false,
             winner: null,
             endReason: '',
-            goldenPoint: false       // égalité à la fin du temps : le prochain panier gagne
+            goldenPoint: false,      // égalité à la fin du temps : le prochain panier gagne
+            // Fautes et lancers francs (Fouls.js)
+            teamFouls: { A: 0, B: 0 },
+            freeThrow: null,         // série en cours : { shooterId, team, total, index }
+            // Tactiques (Tactics.js) : choix des joueurs (gardé d'un match à l'autre), défense et système en cours
+            tactics: { A: { def: 'AUTO', off: 'AUTO' }, B: { def: 'AUTO', off: 'AUTO' } },
+            defenseNow: { A: 'MAN', B: 'MAN' },
+            plays: { A: 'MOTION', B: 'MOTION' }
         };
         this.pendingHalftimeAlert = false;
 
@@ -103,7 +116,6 @@ export class GameEngine {
 
         this.keys = {};
         this.crossoverCooldown = 0;
-        this.stealCooldown = 0;
         this.networkSyncTimer = 0;
 
         this.initThreeScene();
@@ -342,6 +354,8 @@ export class GameEngine {
                 const b = list[j];
                 // Un écran ne recule pas : le défenseur qui le percute est arrêté (Screens.js)
                 if (this.resolveScreenCollision(a, b)) continue;
+                // Box-out : le joueur placé devant garde sa place, l'adversaire derrière est repoussé (Moves.js)
+                if (this.resolveBoxOutCollision(a, b, minSeparation)) continue;
 
                 const dx = b.pos.x - a.pos.x;
                 const dz = b.pos.z - a.pos.z;
@@ -377,13 +391,17 @@ export class GameEngine {
         if (render) this.quality.sample(dt);
 
         if (this.crossoverCooldown > 0) this.crossoverCooldown -= dt;
-        if (this.stealCooldown > 0) this.stealCooldown -= dt;
 
-        // 0. Chronos (hôte) et leur affichage ; écrans posés, défenseurs bloqués, pick and roll lancé par l'hôte
+        // 0. Chronos (hôte) et leur affichage ; écrans posés, défenseurs bloqués, pick and roll lancé par l'hôte ;
+        //    box-out et interceptions (Moves.js), lancer franc d'un bot (Fouls.js), tactiques (Tactics.js)
         this.updateMatchClock(dt);
         this.updateClockUI();
         const matchOver = this.matchRules.matchOver;
         this.updateScreens(dt);
+        this.updateMoveTimers(dt);
+        this.updateFreeThrow(dt);
+        this.updateTactics();
+        this.updateTacticsUI();
 
         // 0 bis. Lire l'état de la Manette (si connectée)
         const padInput = this.pollGamepadInput();
@@ -435,22 +453,25 @@ export class GameEngine {
                 ent.jumpCooldown -= dt;
             }
 
-            // Si le joueur est en plein envol de DUNK vers le panier :
+            // Si le joueur est en plein envol vers le panier (dunk, lay-up, euro step, alley-oop : Moves.js) :
             if (ent.isDunking) {
                 ent.dunkTimer += dt;
                 const t = Math.min(1.0, ent.dunkTimer / ent.dunkDuration);
-                ent.pos.x = THREE.MathUtils.lerp(ent.dunkStartPos.x, ent.dunkTargetPos.x, t);
-                ent.pos.z = THREE.MathUtils.lerp(ent.dunkStartPos.z, ent.dunkTargetPos.z, t);
                 // Courbe parabolique de décollage jusqu'au-dessus du cercle (1.35m de saut -> mains à 3m25)
-                ent.pos.y = Math.sin(t * Math.PI) * 1.38;
-                ent.state = 'DUNK';
+                this.stepFinish(ent, t);
+                const holds = this.ball.holderId === ent.id && isAuthority;
 
+                // Lay-up : le ballon part en haut du saut
+                if (ent.finishType === 'LAYUP' && t >= 0.6 && !ent.layupReleased) {
+                    ent.layupReleased = true;
+                    if (holds) this.finishLayup(ent);
+                }
                 if (t >= 1.0) {
                     ent.isDunking = false;
                     ent.pos.y = 0;
                     ent.vel.y = 0;
                     ent.state = 'IDLE';
-                    if (this.ball.holderId === ent.id && isAuthority) {
+                    if (holds && ent.finishType !== 'LAYUP') {
                         this.finishDunkSlam(ent);
                     }
                 }
@@ -523,7 +544,8 @@ export class GameEngine {
                 this.network.sendPlayerState({
                     pos: { x: me.pos.x, y: me.pos.y, z: me.pos.z },
                     rotY: me.rotY,
-                    state: me.state
+                    state: me.state,
+                    box: me.boxOutTimer > 0 // box-out : l'hôte gère les collisions
                 });
             }
         }
@@ -532,4 +554,5 @@ export class GameEngine {
     }
 }
 
-Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods, NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods);
+Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods,
+    NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods, FoulMethods, MoveMethods, TacticMethods);

@@ -1,25 +1,26 @@
 /**
- * Tests des règles du match (chrono de tir, fin de match, feuille de match), sans navigateur ni 3D.
+ * Tests des règles du match (chrono de tir, fin de match, feuille de match, fautes), sans navigateur ni 3D.
  * Lancer depuis le dossier du jeu :  node --test
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ClockMethods, SHOT_CLOCK } from '../js/gameplay/Clock.js';
 import { MatchSheetMethods } from '../js/gameplay/MatchSheet.js';
+import { FoulMethods } from '../js/gameplay/Fouls.js';
 
 // Les règles touchent un peu à la page (écran de fin) : une page vide suffit ici
 globalThis.document = { getElementById: () => null };
 
 /** Faux moteur : juste ce dont les règles ont besoin, l'hôte qui décide de tout */
-function fakeEngine({ targetScore = 21, gameDuration = 420 } = {}) {
+function fakeEngine({ targetScore = 21, gameDuration = 420, isHalfCourt = true } = {}) {
     const players = [
         { id: 'a1', team: 'A', pos: { x: 0, z: 0 }, profile: { playerName: 'A1' } },
         { id: 'a2', team: 'A', pos: { x: 0, z: 0 }, profile: { playerName: 'A2' } },
         { id: 'b1', team: 'B', pos: { x: 0, z: 0 }, profile: { playerName: 'B1' } }
     ];
-    const engine = Object.assign({}, ClockMethods, MatchSheetMethods, {
+    const engine = Object.assign({}, ClockMethods, MatchSheetMethods, FoulMethods, {
         isAuthority: true,
-        currentMode: { targetScore, gameDuration, isHalfCourt: true },
+        currentMode: { targetScore, gameDuration, isHalfCourt },
         entities: new Map(players.map(p => [p.id, p])),
         ball: { state: 'HELD', holderId: 'a1', pos: { set() {} }, vel: { set() {} } },
         matchRules: { scoreA: 0, scoreB: 0, possessionTeam: 'A', sidesSwapped: false },
@@ -30,10 +31,16 @@ function fakeEngine({ targetScore = 21, gameDuration = 420 } = {}) {
         checkHalftime() {},
         showRuleAlert(text) { this.alerts.push(text); },
         showMatchEnd() {},
-        getLocalEntity() { return null; }
+        getLocalEntity() { return null; },
+        // Tactiques (Tactics.js charge Three.js) : sans effet ici
+        resetTactics() {},
+        noteScoreForTactics() {},
+        pickPossessionPlay() {}
     });
-    // Remise en jeu notée au lieu d'attendre un minuteur
+    // Remise en jeu et lancers francs notés au lieu d'attendre un minuteur
     engine.scheduleCheckBall = (team) => engine.checkBalls.push(team);
+    engine.freeThrows = [];
+    engine.scheduleFreeThrows = (shooter, total) => engine.freeThrows.push([shooter.id, total]);
     engine.resetMatchClock();
     return engine;
 }
@@ -133,5 +140,38 @@ test('pas de passe décisive si le panier arrive trop longtemps après la passe'
     e.onBallGained({ team: 'A', state: 'PASS', passFromId: 'a2', afterShot: false }, e.entities.get('a1'));
     e.liveTime += 10;
     e.onScored('A', 2, 'a1', 'shot');
+    assert.equal(e.matchSheet.stats.a2?.ast ?? 0, 0);
+});
+
+test('faute sur tir : 2 ou 3 lancers si raté, 1 seul (and one) si réussi', () => {
+    const missed3 = fakeEngine();
+    missed3.commitFoul('b1', 'a1', { shotPts: 3, made: false });
+    assert.deepEqual(missed3.freeThrows, [['a1', 3]]);
+    assert.equal(missed3.matchSheet.stats.b1.pf, 1);
+    assert.equal(missed3.matchRules.deadBall, true);
+
+    const andOne = fakeEngine();
+    andOne.scorePoints('A', 2, 'a1', 'shot', () => andOne.commitFoul('b1', 'a1', { shotPts: 2, made: true }));
+    assert.equal(andOne.matchRules.scoreA, 2, 'le panier compte');
+    assert.deepEqual(andOne.freeThrows, [['a1', 1]]);
+    assert.deepEqual(andOne.checkBalls, [], 'pas de remise en jeu avant le lancer franc');
+});
+
+test("faute hors tir : remise en jeu, puis lancers francs au bonus (5e faute d'équipe en 5v5)", () => {
+    const e = fakeEngine({ isHalfCourt: false });
+    for (let i = 0; i < 4; i++) e.commitFoul('b1', 'a2');
+    assert.deepEqual(e.checkBalls, ['A', 'A', 'A', 'A']);
+    assert.deepEqual(e.freeThrows, []);
+    e.commitFoul('b1', 'a2');
+    assert.deepEqual(e.freeThrows, [['a2', 2]]);
+    assert.equal(e.matchRules.teamFouls.B, 5);
+});
+
+test('lancer franc réussi : 1 point, pas de passe décisive', () => {
+    const e = fakeEngine();
+    e.onBallGained({ team: 'A', state: 'PASS', passFromId: 'a2', afterShot: false }, e.entities.get('a1'));
+    e.scorePoints('A', 1, 'a1', 'ft');
+    assert.equal(e.matchRules.scoreA, 1);
+    assert.equal(e.matchSheet.stats.a1.ftm, 1);
     assert.equal(e.matchSheet.stats.a2?.ast ?? 0, 0);
 });

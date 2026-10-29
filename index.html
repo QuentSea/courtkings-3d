@@ -346,6 +346,19 @@
                     <option value="moyenne">Qualité : Moyenne</option>
                     <option value="basse">Qualité : Basse (petits PC)</option>
                 </select>
+                <select id="hud-offense" class="hud-btn hud-select" title="Système d'attaque de ton équipe (les bots le suivent)">
+                    <option value="AUTO">Attaque : Auto</option>
+                    <option value="MOTION">Attaque : Coupes</option>
+                    <option value="PNR">Attaque : Pick and roll</option>
+                    <option value="ISO">Attaque : Isolation</option>
+                    <option value="POST">Attaque : Jeu au poste</option>
+                </select>
+                <select id="hud-defense" class="hud-btn hud-select" title="Défense de ton équipe (les bots la suivent)">
+                    <option value="AUTO">Défense : Auto</option>
+                    <option value="MAN">Défense : Individuelle</option>
+                    <option value="ZONE">Défense : Zone</option>
+                    <option value="PRESS">Défense : Pressing</option>
+                </select>
                 <button type="button" class="hud-btn active" data-hud-mode="3v3">3v3 Half</button>
                 <button type="button" class="hud-btn" data-hud-mode="4v4">4v4 Half</button>
                 <button type="button" class="hud-btn" data-hud-mode="5v5">5v5 Full</button>
@@ -353,6 +366,9 @@
                 <button type="button" id="btn-hud-lobby" class="hud-btn">Salon</button>
             </div>
         </div>
+
+        <!-- TACTIQUES EN COURS ET FAUTES D'ÉQUIPE -->
+        <div id="hud-tactics" class="hud-tactics"></div>
 
         <!-- BANNIÈRE D'ALERTE RÈGLES / GREEN RELEASE -->
         <div id="court-rule-toast" class="court-rule-toast hidden">CHECK BALL !</div>
@@ -373,7 +389,8 @@
                 <div class="sheet-panel" data-sheet-panel="stats">
                     <div class="sheet-table-wrap"><table id="sheet-stats" class="sheet-stats"></table></div>
                     <p class="sheet-legend">2 PTS / 3 PTS / DUNKS : réussis / tentés · REB : rebonds (offensifs / défensifs) ·
-                        PD : passes décisives · INT : interceptions · CTR : contres · ÉCR : écrans réussis · BP : balles perdues</p>
+                        LF : lancers francs réussis / tentés · PD : passes décisives · INT : interceptions · CTR : contres ·
+                        ÉCR : écrans réussis · BP : balles perdues · F : fautes</p>
                 </div>
                 <div class="sheet-panel hidden" data-sheet-panel="log">
                     <label class="sheet-filter"><input type="checkbox" id="sheet-only-mine"> Seulement mes actions</label>
@@ -408,12 +425,13 @@
         <div class="controls-Overlay-bar">
             <span><kbd>Stick G</kbd> / <kbd>ZQSD</kbd> Bouger & Viser Passe</span>
             <span><kbd>A / ✕</kbd> / <kbd>E</kbd> Passer au joueur visé (Cercle Jaune)</span>
-            <span><kbd>X / ▢</kbd> / <kbd>Espace</kbd> Tirer (Green)</span>
+            <span><kbd>X / ▢</kbd> / <kbd>Espace</kbd> Tirer (Green) · près du cercle : lay-up, + <kbd>Shift</kbd> dunk · en reculant : step-back / fadeaway</span>
+            <span><kbd>Y / △</kbd> / <kbd>T</kbd> Alley-oop (avec ballon : lob ; sans : le demander)</span>
             <span><kbd>Y / △</kbd> / <kbd>Espace</kbd> / <kbd>R</kbd> Sauter / Contrer / Rebond</span>
-            <span><kbd>B / ◯</kbd> / <kbd>C / F</kbd> Crossover / Interception</span>
+            <span><kbd>B / ◯</kbd> / <kbd>C / F</kbd> Crossover (près du cercle : euro step) / Interception</span>
             <span><kbd>L1 / ◯</kbd> / <kbd>B</kbd> Écran (avec ballon : en demander un)</span>
             <span><kbd>R2 / Shift</kbd> Sprint</span>
-            <span><kbd>L2</kbd> Défense</span>
+            <span><kbd>L2</kbd> / <kbd>F</kbd> Défense (pendant un tir adverse : box-out)</span>
         </div>
     </section>
 

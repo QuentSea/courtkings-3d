@@ -8,35 +8,43 @@ import { POSITIONS } from '../config/constants.js';
 
 export const ActionsMethods = {
     /**
-     * Déclenche un envol spectaculaire vers le cercle pour écraser un DUNK (Tomahawk / Poster Dunk)
+     * Déclenche un envol vers le cercle : DUNK (Tomahawk / Poster Dunk) ou LAY-UP, avec euro step
+     * (euro = 1 ou -1 : pas de côté) ; durée imposée pour un alley-oop (Moves.js)
      */
-    startDunkDrive(player, hoop, distToRim) {
-        if (this.shotMeter.active) {
-            this.shotMeter.active = false;
-            if (this.shotMeter.meterEl) this.shotMeter.meterEl.classList.add('hidden');
-        }
+    startDunkDrive(player, hoop, distToRim, { kind = 'DUNK', euro = 0, duration = null, silent = false } = {}) {
+        if (player.isLocal && this.shotMeter.active) this.shotMeter.cancel();
 
         const dirZ = hoop.side === 'NORTH' ? 1 : -1;
         const targetLanding = new THREE.Vector3(
             hoop.rimPos.x,
             0,
-            hoop.rimPos.z + dirZ * 0.32
+            hoop.rimPos.z + dirZ * (kind === 'LAYUP' ? 0.75 : 0.32)
         );
+        let mid = null;
+        if (euro) {
+            // Euro step : passage par un point sur le côté de la ligne droite vers le cercle
+            const dx = targetLanding.x - player.pos.x;
+            const dz = targetLanding.z - player.pos.z;
+            const len = Math.sqrt(dx * dx + dz * dz) || 1;
+            mid = new THREE.Vector3(
+                (player.pos.x + targetLanding.x) / 2 - (dz / len) * euro * 1.1,
+                0,
+                (player.pos.z + targetLanding.z) / 2 + (dx / len) * euro * 1.1
+            );
+            this.clampToCourtBounds(mid);
+        }
+        const dur = duration ?? (kind === 'LAYUP'
+            ? Math.max(0.5, Math.min(0.8, 0.45 + distToRim * 0.09))
+            : Math.max(0.38, Math.min(0.68, 0.34 + distToRim * 0.085)));
+        this.beginFinish(player, hoop, player.pos.clone(), targetLanding, mid, kind, dur);
 
-        player.isDunking = true;
-        player.dunkStartPos = player.pos.clone();
-        player.dunkTargetPos = targetLanding;
-        player.dunkHoop = hoop;
-        player.dunkTimer = 0;
-        player.dunkDuration = Math.max(0.38, Math.min(0.68, 0.34 + distToRim * 0.085));
-        player.state = 'DUNK';
-        player.rotY = Math.atan2(hoop.rimPos.x - player.pos.x, hoop.rimPos.z - player.pos.z);
-
-        if (player.isLocal) this.network.sendGameEvent('DUNK_START', {
+        if (player.isLocal && !silent) this.network.sendGameEvent('DUNK_START', {
             playerId: player.id,
             startPos: { x: player.dunkStartPos.x, y: 0, z: player.dunkStartPos.z },
             targetPos: { x: targetLanding.x, y: 0, z: targetLanding.z },
-            duration: player.dunkDuration
+            mid: mid ? { x: mid.x, z: mid.z } : null,
+            kind,
+            duration: dur
         });
     },
 
@@ -53,6 +61,7 @@ export const ActionsMethods = {
         player.vel.y = 4.4 + ((defAttr - 60) / 39) * 1.15;
         player.jumpCooldown = 0.72;
         player.state = 'CONTEST';
+        player.blockTried = false; // une seule chance de contrer le porteur par saut
 
         // Orienter automatiquement le défenseur vers le ballon ou le tireur
         const carrier = this.ball.holderId ? this.entities.get(this.ball.holderId) : null;
@@ -75,7 +84,16 @@ export const ActionsMethods = {
     },
 
     triggerCrossover(entity) {
-        if (this.ball.holderId !== entity.id || this.crossoverCooldown > 0) return;
+        if (this.ball.holderId !== entity.id || this.crossoverCooldown > 0 || entity.isDunking) return;
+        if (this.isFreeThrowShooter(entity)) return;
+        // Près du cercle : euro step (lay-up avec un pas de côté puis de l'autre, Moves.js)
+        const hoop = this.getAttackingHoopForTeam(entity.team);
+        const dist = this.getHorizontalDist(entity.pos, hoop.rimPos);
+        if (entity.isLocal && !this.matchRules.needsTakeBack && dist <= this.finishRange(entity) + 0.8) {
+            this.startDunkDrive(entity, hoop, dist, { kind: 'LAYUP', euro: entity.mesh.dribbleHand === 'RIGHT' ? 1 : -1 });
+            this.showRuleAlert('💨 EURO STEP !', false);
+            return;
+        }
         entity.mesh.dribbleHand = entity.mesh.dribbleHand === 'RIGHT' ? 'LEFT' : 'RIGHT';
         entity.state = 'CROSSOVER';
 
@@ -176,7 +194,10 @@ export const ActionsMethods = {
     executeShotRelease(shooter) {
         const hoop = this.getAttackingHoopForTeam(shooter.team);
         const dist = this.getHorizontalDist(shooter.pos, hoop.rimPos);
-        const contest = this.calculateContestFactor(shooter);
+        // Lancer franc : personne ne conteste ; fadeaway : le défenseur conteste moins (Moves.js)
+        const contest = this.isFreeThrowShooter(shooter) ? 0 : this.calculateContestFactor(shooter) * (shooter.shotContestMul || 1);
+        shooter.shotMove = null;
+        shooter.shotContestMul = 1;
         const outcome = this.shotMeter.releaseShot(shooter.profile.attributes, dist, contest);
 
         this.launchShotBall(shooter, hoop, outcome);
@@ -186,8 +207,8 @@ export const ActionsMethods = {
      * Tentative d'interception (Steal sur le dribbleur OU Interception d'une passe en plein vol)
      */
     tryStealBall(defender) {
-        if (this.stealCooldown > 0) return;
-        this.stealCooldown = 1.05;
+        if (defender.stealCd > 0 || this.matchRules.deadBall) return;
+        defender.stealCd = 1.05;
 
         const defStat = defender.profile.attributes?.defense || 78;
         const posScale = POSITIONS[defender.profile.position]?.scaleY || 1.0;
@@ -242,8 +263,12 @@ export const ActionsMethods = {
             this.giveBallTo(defender.id, true);
             this.showRuleAlert(`⚡ INTERCEPTION (STEAL) DE ${defender.profile.playerName} !`);
             if (defender.isLocal) this.network.sendGameEvent('STEAL', { stealerId: defender.id });
+        } else if (this.rollReachInFoul(defender, carrier, dist)) {
+            // Faute en voulant prendre le ballon (Fouls.js) : décidée par l'hôte pour un invité
+            if (this.isAuthority) this.commitFoul(defender.id, carrier.id);
+            else this.network.sendGameEvent('FOUL', { foulerId: defender.id, victimId: carrier.id });
         } else {
-            this.showRuleAlert(`Tentative d'interception ratée`);
+            if (defender.isLocal) this.showRuleAlert(`Tentative d'interception ratée`, false);
         }
     },
 
@@ -283,10 +308,14 @@ export const ActionsMethods = {
                 carrier &&
                 carrier.team !== player.team &&
                 (carrier.state === 'SHOOT' || carrier.state === 'DUNK') &&
-                player.pos.y > 0.22
+                player.pos.y > 0.22 &&
+                !player.blockTried
             ) {
                 const horizDist = this.getHorizontalDist(player.pos, carrier.pos);
-                const blockChance = 0.25 + ((defStat - 60) / 39) * 0.45 * posScale;
+                let blockChance = 0.25 + ((defStat - 60) / 39) * 0.45 * posScale;
+                // Lancé vers le cercle (dunk, lay-up) : plus dur à contrer, encore plus après un euro step
+                if (carrier.isDunking) blockChance *= carrier.dunkMid ? 0.2 : 0.35;
+                if (horizDist <= 1.25 * posScale) player.blockTried = true; // un seul essai par saut (pas à chaque image)
                 if (horizDist <= 1.25 * posScale && Math.random() < blockChance) {
                     if (carrier.isLocal && this.shotMeter.active) {
                         this.shotMeter.active = false;
@@ -303,7 +332,8 @@ export const ActionsMethods = {
             const dist = this.getHorizontalDist(player.pos, this.ball.pos);
             // Sauter permet d'attraper des rebonds beaucoup plus hauts (jusqu'à 3m20)
             const maxReboundHeight = player.pos.y + 2.35 * posScale;
-            const reach = posScale * (player.pos.y > 0.15 ? 1.85 : 1.35);
+            // Joueur enfermé par un box-out : il touche moins de rebonds (Moves.js)
+            const reach = posScale * (player.pos.y > 0.15 ? 1.85 : 1.35) * this.reboundReachFactor(player);
             if (dist <= reach && this.ball.pos.y <= maxReboundHeight) {
                 const isDefRebound = this.matchRules.possessionTeam !== player.team;
                 this.giveBallTo(player.id, isDefRebound);
@@ -320,6 +350,7 @@ export const ActionsMethods = {
      */
     executeShotBlock(blocker, shooter = null) {
         if (this.isAuthority) this.onBlock(blocker.id, shooter?.id || this.ball.pendingShotOutcome?.shooterId);
+        const fouledShot = this.ball.pendingShotOutcome;
         this.ball.holderId = null;
         this.ball.pendingShotOutcome = null;
         this.ball.state = 'LOOSE';
@@ -345,6 +376,7 @@ export const ActionsMethods = {
             vel: { x: this.ball.vel.x, y: this.ball.vel.y, z: this.ball.vel.z },
             pos: { x: this.ball.pos.x, y: this.ball.pos.y, z: this.ball.pos.z }
         });
+        this.foulOnBlockedShot(fouledShot); // faute déjà sifflée sur ce tir (Fouls.js)
     },
 
     calculateContestFactor(shooter) {

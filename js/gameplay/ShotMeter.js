@@ -27,8 +27,9 @@ export class ShotMeter {
      * @param {Object} shooterAttributes { shooting, finishing, ... }
      * @param {number} distanceToRim Distance en mètres au panier
      * @param {number} contestFactor 0.0 (Ouvert) à 1.0 (Étouffé / Contré)
+     * @param {number} extraPenalty fenêtre verte réduite pour un tir difficile (step-back, fadeaway)
      */
-    startCharge(shooterAttributes, distanceToRim, contestFactor = 0) {
+    startCharge(shooterAttributes, distanceToRim, contestFactor = 0, extraPenalty = 0) {
         this.active = true;
         this.progress = 0;
 
@@ -43,7 +44,7 @@ export class ShotMeter {
         const distPenalty = Math.max(0, (distanceToRim - 4.5) * 0.006);
         const contestPenalty = contestFactor * 0.045;
 
-        this.greenHalfWidth = Math.max(0.032, Math.min(0.135, 0.055 + statBonus - distPenalty - contestPenalty));
+        this.greenHalfWidth = Math.max(0.032, Math.min(0.135, 0.055 + statBonus - distPenalty - contestPenalty - extraPenalty));
         this.greenCenter = 0.78;
 
         if (this.meterEl) {

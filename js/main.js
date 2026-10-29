@@ -234,6 +234,16 @@ class CourtKingsApp {
             this.switchScreen('lobby');
         });
 
+        // Tactiques de l'équipe du joueur (Tactics.js) : l'hôte décide, un invité envoie son choix
+        const offenseSelect = document.getElementById('hud-offense');
+        const defenseSelect = document.getElementById('hud-defense');
+        [offenseSelect, defenseSelect].forEach((sel) => {
+            sel?.addEventListener('change', () => {
+                this.gameEngine.setMyTactics(defenseSelect.value, offenseSelect.value);
+                sel.blur(); // rendre les touches au jeu
+            });
+        });
+
         // Qualité graphique (Auto / Haute / Moyenne / Basse) pour les PC moins puissants
         const qualitySelect = document.getElementById('hud-quality');
         if (qualitySelect) {

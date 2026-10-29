@@ -26,6 +26,8 @@ export const ClockMethods = {
         r.goldenPoint = false;
         this.matchToken = (this.matchToken || 0) + 1;
         this.resetMatchSheet();
+        this.resetFouls();   // Fouls.js
+        this.resetTactics(); // Tactics.js
         this.hideMatchEnd();
         this.lastClockText = null;
         this.lastShotText = null;
@@ -59,6 +61,7 @@ export const ClockMethods = {
             if (!this.currentMode.isHalfCourt && !r.sidesSwapped && r.gameClock <= duration / 2 && this.ball.state !== 'SHOT') {
                 // Mi-temps au temps : changement de côté, l'équipe B (qui n'a pas commencé) remet en jeu
                 r.sidesSwapped = true;
+                r.teamFouls = { A: 0, B: 0 }; // fautes d'équipe remises à zéro à la mi-temps
                 this.pendingHalftimeAlert = true;
                 this.stopPlay();
                 this.showRuleAlert('⏱️ FIN DE LA 1RE MI-TEMPS !');
@@ -107,6 +110,7 @@ export const ClockMethods = {
         const r = this.matchRules;
         if (prevTeam !== team) {
             r.shotClock = SHOT_CLOCK;
+            this.pickPossessionPlay(team); // système d'attaque de la nouvelle possession (Tactics.js)
         } else if (r.shotClockStopped) {
             r.shotClock = Math.max(r.shotClock, OFFENSIVE_REBOUND_CLOCK);
         }
@@ -114,17 +118,23 @@ export const ClockMethods = {
     },
 
     /**
-     * Points marqués (tir ou dunk, hôte) : score, marqueur, fin de match ou mi-temps, puis remise en jeu
+     * Points marqués (tir, dunk ou lancer franc, hôte) : score, marqueur, fin de match ou mi-temps, puis remise
+     * en jeu. then : à la place de la remise en jeu (lancers francs après une faute, lancer suivant d'une série)
      */
-    scorePoints(team, pts, scorerId, kind = 'shot') {
+    scorePoints(team, pts, scorerId, kind = 'shot', then = null) {
         const r = this.matchRules;
         if (team === 'A') r.scoreA += pts; else r.scoreB += pts;
         this.onScored(team, pts, scorerId, kind); // feuille de match
+        if (kind !== 'ft') this.noteScoreForTactics(team, pts); // défense « Auto » de l'adversaire (Tactics.js)
         r.deadBall = true;
         r.shotClockStopped = true;
         this.updateScoreboardUI();
 
         if (this.checkMatchEnd()) return;
+        if (then) {
+            then();
+            return;
+        }
         this.checkHalftime();
         this.scheduleCheckBall(team === 'A' ? 'B' : 'A', 1200);
     },
@@ -166,6 +176,7 @@ export const ClockMethods = {
         r.matchOver = true;
         r.winner = winner;
         r.endReason = reason;
+        r.freeThrow = null;
         this.stopPlay();
         this.showRuleAlert(`🏆 VICTOIRE DE L'ÉQUIPE ${winner} !`);
         this.showMatchEnd();

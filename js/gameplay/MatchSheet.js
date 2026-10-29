@@ -1,7 +1,7 @@
 /**
  * MatchSheet.js — Feuille de match : statistiques de chaque joueur et déroulé de toutes les actions.
- * - L'hôte compte tout (tirs, paniers, dunks, rebonds, passes décisives, interceptions, contres, écrans,
- *   balles perdues) et note chaque action avec le temps de match.
+ * - L'hôte compte tout (tirs, lancers francs, paniers, dunks, rebonds, passes décisives, interceptions, contres,
+ *   écrans, balles perdues, fautes) et note chaque action avec le temps de match.
  * - À la fin, la feuille part chez les invités avec l'état du monde (NetSync) et s'affiche dans l'écran de fin :
  *   onglet « Statistiques » (une ligne par joueur, la sienne en évidence) et « Déroulé du match »
  *   (avec « seulement mes actions »).
@@ -14,8 +14,8 @@ const ASSIST_WINDOW = 6; // secondes de jeu entre la passe et le panier pour une
 const MAX_LOG = 400;
 
 const EMPTY = () => ({
-    pts: 0, fgm2: 0, fga2: 0, fgm3: 0, fga3: 0, dunkM: 0, dunkA: 0,
-    orb: 0, drb: 0, ast: 0, stl: 0, blk: 0, scr: 0, tov: 0
+    pts: 0, fgm2: 0, fga2: 0, fgm3: 0, fga3: 0, dunkM: 0, dunkA: 0, ftm: 0, fta: 0,
+    orb: 0, drb: 0, ast: 0, stl: 0, blk: 0, scr: 0, tov: 0, pf: 0
 });
 
 export const MatchSheetMethods = {
@@ -79,8 +79,19 @@ export const MatchSheetMethods = {
         if (r.possessionTeam !== prev.team) this.lastPass = null;
     },
 
-    onShotTaken(shooter, isThree) {
-        this.addStat(shooter.id, isThree ? 'fga3' : 'fga2');
+    onShotTaken(shooter, isThree, isFreeThrow = false) {
+        this.addStat(shooter.id, isFreeThrow ? 'fta' : (isThree ? 'fga3' : 'fga2'));
+    },
+
+    onFreeThrowMissed(outcome) {
+        const ft = outcome.freeThrow;
+        this.logPlay(`${outcome.shooterName} rate un lancer franc (${ft.index}/${ft.total})`, [outcome.shooterId], outcome.shooterTeam);
+    },
+
+    onFoul(fouler, victim, teamFouls) {
+        this.addStat(fouler.id, 'pf');
+        this.logPlay(`Faute de ${fouler.profile.playerName} sur ${victim.profile.playerName} (${teamFouls}e faute d'équipe)`,
+            [fouler.id, victim.id], fouler.team);
     },
 
     onShotMissed(outcome) {
@@ -99,16 +110,20 @@ export const MatchSheetMethods = {
         if (!this.isAuthority) return;
         const s = this.statsOf(scorerId);
         s.pts += pts;
-        if (kind === 'dunk') { s.dunkM++; s.fgm2++; s.fga2++; } else if (pts === 3) s.fgm3++; else s.fgm2++;
+        // Dunk et alley-oop : comptés dans les tirs à 2 pts au moment du dunk (pas de launchShotBall)
+        if (kind === 'dunk' || kind === 'alleyoop') { s.dunkM++; s.fgm2++; s.fga2++; }
+        else if (kind === 'ft') s.ftm++;
+        else if (pts === 3) s.fgm3++; else s.fgm2++;
 
         let assistText = '';
         const lp = this.lastPass;
-        if (lp && lp.toId === scorerId && this.liveTime - lp.at <= ASSIST_WINDOW && this.entities.get(lp.fromId)?.team === team) {
+        if (kind !== 'ft' && lp && lp.toId === scorerId && this.liveTime - lp.at <= ASSIST_WINDOW && this.entities.get(lp.fromId)?.team === team) {
             this.addStat(lp.fromId, 'ast');
             assistText = ` (passe décisive de ${this.nameOf(lp.fromId)})`;
         }
-        this.lastPass = null;
-        const what = kind === 'dunk' ? 'dunke' : `marque à ${pts} pts`;
+        if (kind !== 'ft') this.lastPass = null;
+        const what = { dunk: 'dunke', alleyoop: 'smashe un alley-oop', layup: 'marque un lay-up', ft: 'réussit un lancer franc' }[kind]
+            || `marque à ${pts} pts`;
         const r = this.matchRules;
         this.logPlay(`${this.nameOf(scorerId)} ${what}${assistText} — ${r.scoreA}-${r.scoreB}`,
             [scorerId, assistText ? lp.fromId : null], team);
@@ -152,7 +167,7 @@ export const MatchSheetMethods = {
         const rows = [];
         for (const team of ['A', 'B']) {
             const score = team === 'A' ? this.matchRules.scoreA : this.matchRules.scoreB;
-            rows.push(`<tr class="sheet-team team-${team.toLowerCase()}"><th colspan="11">ÉQUIPE ${team} — ${score} pts</th></tr>`);
+            rows.push(`<tr class="sheet-team team-${team.toLowerCase()}"><th colspan="13">ÉQUIPE ${team} — ${score} pts</th></tr>`);
             const players = [...this.entities.values()].filter(e => e.team === team);
             players.sort((a, b) => (this.matchSheet.stats[b.id]?.pts || 0) - (this.matchSheet.stats[a.id]?.pts || 0));
             for (const ent of players) {
@@ -160,16 +175,17 @@ export const MatchSheetMethods = {
                 rows.push(`<tr class="${ent.id === myId ? 'me' : ''}">
                     <td class="sheet-name">${esc(ent.profile.playerName)}${ent.id === myId ? ' (toi)' : ''}</td>
                     <td class="sheet-pts">${s.pts}</td>
-                    <td>${s.fgm2}/${s.fga2}</td><td>${s.fgm3}/${s.fga3}</td><td>${s.dunkM}/${s.dunkA}</td>
+                    <td>${s.fgm2}/${s.fga2}</td><td>${s.fgm3}/${s.fga3}</td><td>${s.dunkM}/${s.dunkA}</td><td>${s.ftm}/${s.fta}</td>
                     <td>${s.orb + s.drb} <small>(${s.orb}/${s.drb})</small></td>
-                    <td>${s.ast}</td><td>${s.stl}</td><td>${s.blk}</td><td>${s.scr}</td><td>${s.tov}</td></tr>`);
+                    <td>${s.ast}</td><td>${s.stl}</td><td>${s.blk}</td><td>${s.scr}</td><td>${s.tov}</td><td>${s.pf}</td></tr>`);
             }
         }
         table.innerHTML = `<thead><tr><th>Joueur</th><th title="Points">PTS</th><th title="Tirs à 2 pts réussis / tentés">2 PTS</th>
             <th title="Tirs à 3 pts réussis / tentés">3 PTS</th><th title="Dunks réussis / tentés">DUNKS</th>
+            <th title="Lancers francs réussis / tentés">LF</th>
             <th title="Rebonds (offensifs / défensifs)">REB</th><th title="Passes décisives">PD</th>
             <th title="Interceptions">INT</th><th title="Contres">CTR</th><th title="Écrans réussis">ÉCR</th>
-            <th title="Balles perdues">BP</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+            <th title="Balles perdues">BP</th><th title="Fautes personnelles">F</th></tr></thead><tbody>${rows.join('')}</tbody>`;
 
         const mine = this.sheetFilterMine;
         const entries = this.matchSheet.log.filter(e => !mine || e.ids.includes(myId));

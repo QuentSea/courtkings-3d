@@ -18,6 +18,7 @@ import { BindingsPanel } from './gameplay/Bindings.js';
 import { setupRenderer } from './render/RenderSetup.js';
 import { renderCareerCard, bindCareerWindow } from './progress/CareerUI.js';
 import { TouchControls } from './gameplay/TouchControls.js';
+import { Tournament, MY_TEAM } from './progress/Tournament.js';
 
 class CourtKingsApp {
     constructor() {
@@ -60,6 +61,10 @@ class CourtKingsApp {
             renderCareerCard();
             this.builder.syncUIFromProfile();
         };
+
+        // Tournoi contre les bots (Tournament.js) : chacun de tes matchs se joue en solo, sans réseau
+        this.tournament = new Tournament((opponent, difficulty, mode) => this.startTournamentMatch(opponent, difficulty, mode));
+        this.gameEngine.onTournamentEnd = (won, mine, theirs) => this.tournament.recordMyResult(won, mine, theirs);
 
         this.bindGlobalNavigation();
         this.checkURLInviteCode();
@@ -210,6 +215,16 @@ class CourtKingsApp {
         document.getElementById('btn-practice-lobby')?.addEventListener('click', () => {
             document.getElementById('practice-result')?.classList.add('hidden');
             this.switchScreen('lobby');
+        });
+
+        // Tournoi : tableau ; après un match du tournoi, « Suite du tournoi » y revient
+        document.getElementById('btn-tournament')?.addEventListener('click', () => {
+            this.tournament.open(this.network.lobbyState.mode, this.network.lobbyState.difficulty);
+        });
+        document.getElementById('btn-match-end-tournament')?.addEventListener('click', () => {
+            this.gameEngine.hideMatchEnd();
+            this.switchScreen('lobby');
+            this.tournament.open(this.network.lobbyState.mode, this.network.lobbyState.difficulty);
         });
 
         // Niveau des bots adverses (l'hôte choisit)
@@ -491,6 +506,21 @@ class CourtKingsApp {
             mesh.root.position.set((idx - (total - 1) / 2) * spacing, 0, 0);
             if (!mesh.root.parent) this.lobbyScene.add(mesh.root);
         });
+    }
+
+    /** Match du tournoi : toi et des bots contre l'équipe de bots du tableau (Tournament.js) */
+    startTournamentMatch(opponent, difficulty, mode) {
+        this.builder.saveProfile();
+        const id = this.network.localPeerId;
+        this.switchScreen('match');
+        this.gameEngine.startMatch({
+            mode,
+            difficulty,
+            fillWithBots: true,
+            tournament: true,
+            teamNames: { A: MY_TEAM, B: opponent },
+            players: { [id]: { peerId: id, team: 'A', profile: this.builder.getProfile() } }
+        }, id);
     }
 
     enterMatchScreen(lobbyState) {

@@ -83,8 +83,7 @@ export const ControlsMethods = {
      */
     setMenuOpen(open) {
         this.menuOpen = open;
-        const solo = Object.keys(this.network.lobbyState?.players || {}).length <= 1;
-        this.paused = open && solo;
+        this.paused = open && this.isSolo();
         document.body.classList.toggle('menu-open', open);
         if (open) {
             this.keys = {};

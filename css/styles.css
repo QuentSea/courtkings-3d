@@ -1299,6 +1299,32 @@ body {
 .career-record strong { font-family: var(--font-display); font-size: 1.3rem; color: var(--accent-gold); }
 .career-record span { font-size: 0.75rem; color: var(--text-muted); }
 .career-subtitle { margin: 6px 0; font-size: 0.95rem; }
+/* Tableau du tournoi (Tournament.js) : quarts, demies, finale côte à côte */
+.tournament-bracket {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 10px 0;
+}
+.tournament-round {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: 8px;
+}
+.tournament-round h3 { font-size: 0.85rem; color: var(--accent-gold); text-align: center; }
+.tournament-match {
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid var(--border-subtle);
+    font-size: 0.8rem;
+}
+.tournament-team { padding: 2px 0; color: var(--text-muted); }
+.tournament-team.me { color: var(--accent-blue); }
+.tournament-team.won { color: #f8fafc; font-weight: 700; }
+.tournament-team.lost { text-decoration: line-through; opacity: 0.6; }
+.tournament-score { font-size: 0.72rem; color: var(--accent-gold); text-align: right; }
 .career-history tr.won td:nth-child(3) { color: #4ade80; }
 .career-history tr.lost td:nth-child(3) { color: var(--accent-red); }
 

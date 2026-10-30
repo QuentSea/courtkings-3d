@@ -295,6 +295,7 @@
                 <div class="mode-pills practice-pills" title="Modes en solo, sans les autres joueurs du salon">
                     <button type="button" class="mode-pill" data-practice="training">🎯 ENTRAÎNEMENT</button>
                     <button type="button" class="mode-pill" data-practice="contest3">🏀 CONCOURS À 3 POINTS</button>
+                    <button type="button" id="btn-tournament" class="mode-pill">🏆 TOURNOI</button>
                 </div>
                 <label class="bot-toggle" title="Niveau des bots qui jouent contre vous (choisi par l'hôte)">
                     <span>Bots adverses :</span>
@@ -344,7 +345,7 @@
         <div class="match-hud-top">
             <div class="scoreboard-card">
                 <div class="team-score team-a">
-                    <span class="ts-name">ÉQUIPE A</span>
+                    <span id="hud-name-a" class="ts-name">ÉQUIPE A</span>
                     <span id="hud-score-a" class="ts-points">0</span>
                 </div>
                 <div class="score-center">
@@ -357,7 +358,7 @@
                 </div>
                 <div class="team-score team-b">
                     <span id="hud-score-b" class="ts-points">0</span>
-                    <span class="ts-name">ÉQUIPE B</span>
+                    <span id="hud-name-b" class="ts-name">ÉQUIPE B</span>
                 </div>
             </div>
 
@@ -446,6 +447,7 @@
 
                 <div class="match-end-actions">
                     <button type="button" id="btn-match-end-replay" class="btn-primary-glow">Rejouer</button>
+                    <button type="button" id="btn-match-end-tournament" class="btn-primary-glow hidden">Suite du tournoi</button>
                     <button type="button" id="btn-match-end-lobby" class="hud-btn">Retour au salon</button>
                 </div>
                 <p id="match-end-wait" class="match-end-wait hidden">L'hôte peut relancer une partie.</p>
@@ -488,6 +490,20 @@
             <p class="touch-rotate-hint">↻ Tourne ton téléphone pour jouer en paysage</p>
         </div>
     </section>
+
+    <!-- FENÊTRE « TOURNOI » (Tournament.js) -->
+    <div id="tournament-overlay" class="bindings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="tournament-title">
+        <div class="bindings-card">
+            <h2 id="tournament-title">🏆 Tournoi contre les bots</h2>
+            <p id="tournament-status" class="bindings-help"></p>
+            <div id="tournament-bracket" class="tournament-bracket"></div>
+            <div class="bindings-actions">
+                <button type="button" id="btn-tournament-new" class="hud-btn">Nouveau tournoi</button>
+                <button type="button" id="btn-tournament-close" class="hud-btn">Fermer</button>
+                <button type="button" id="btn-tournament-play" class="btn-primary-glow">Jouer</button>
+            </div>
+        </div>
+    </div>
 
     <!-- FENÊTRE « HISTORIQUE & RECORDS » (Career.js) -->
     <div id="career-overlay" class="bindings-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="career-title">

@@ -252,6 +252,15 @@ export class GameEngine {
         // Modes en solo (Practice.js) : bandeau à la place du tableau de score ; remis à zéro pour un vrai match
         this.practice = null;
         document.body.classList.toggle('practice', !!this.currentMode.practice);
+        // Match du tournoi (Tournament.js) et modes en solo : rien n'est envoyé aux autres joueurs du salon
+        this.tournamentMatch = !!lobbyState.tournament;
+        this.offline = this.tournamentMatch || !!this.currentMode.practice;
+        const names = lobbyState.teamNames || { A: 'Équipe A', B: 'Équipe B' };
+        this.teamNames = names;
+        for (const team of ['A', 'B']) {
+            const el = document.getElementById(`hud-name-${team.toLowerCase()}`);
+            if (el) el.textContent = names[team].toUpperCase();
+        }
         this.court.buildCourt(this.currentMode.isHalfCourt);
 
         this.matchRules.scoreA = 0;
@@ -393,6 +402,11 @@ export class GameEngine {
         return this.entities.get(this.localPlayerId);
     }
 
+    /** Personne d'autre ne joue ce match (seul dans le salon, tournoi, entraînement) : pause et ralenti permis */
+    isSolo() {
+        return !!this.offline || Object.keys(this.network.lobbyState?.players || {}).length <= 1;
+    }
+
     /**
      * Son d'une action du jeu (SoundFX.js) à l'endroit `pos`. Décidé par l'hôte : il l'envoie aussi aux invités ;
      * chez un invité, seuls les sons calculés sur place (local = true, ex. le dribble) sont joués ici
@@ -401,8 +415,7 @@ export class GameEngine {
         if (!this.isAuthority && !local) return;
         this.sound.play(name, pos, this.camera);
         this.soundEffects(name, pos); // filet, secousse (Effects.js)
-        const others = Object.keys(this.network.lobbyState?.players || {}).length > 1;
-        if (this.isAuthority && !local && others && this.pendingSfx.length < 8) {
+        if (this.isAuthority && !local && !this.isSolo() && this.pendingSfx.length < 8) {
             this.pendingSfx.push([name, +(pos?.x ?? 0).toFixed(1), +(pos?.z ?? 0).toFixed(1)]);
         }
     }
@@ -662,7 +675,7 @@ export class GameEngine {
         // 10. Synchronisation Réseau Temps Réel (20 Hz) :
         // l'hôte envoie tout l'état du monde, un invité envoie seulement son joueur
         this.networkSyncTimer += dt;
-        if (this.networkSyncTimer >= 0.05 && !this.currentMode.practice) { // modes en solo : rien à envoyer
+        if (this.networkSyncTimer >= 0.05 && !this.offline) { // tournoi, modes en solo : rien à envoyer
             this.networkSyncTimer = 0;
             if (isAuthority) {
                 this.network.sendWorldState(this.buildWorldState());

@@ -22,8 +22,7 @@ export const EffectsMethods = {
 
     /** Dunk ou alley-oop qui part (hôte, seul contre les bots) : ralenti et caméra près du cercle */
     startDunkCinema(player, hoop, duration) {
-        const solo = Object.keys(this.network.lobbyState?.players || {}).length <= 1;
-        if (!solo || !this.isAuthority) return;
+        if (!this.isSolo() || !this.isAuthority) return;
         this.slowMo = duration + 0.35; // en temps de jeu (le ballon a le temps de traverser le filet)
         this.cinema = { focus: hoop.rimPos.clone(), from: player.pos.clone() };
     },

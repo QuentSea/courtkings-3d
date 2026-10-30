@@ -31,7 +31,8 @@ export const ClockMethods = {
         this.resetFouls();   // Fouls.js
         this.resetTactics(); // Tactics.js
         this.hideMatchEnd();
-        this.careerDone = false; // expérience du match pas encore comptée (awardCareer)
+        this.careerDone = false;     // expérience du match pas encore comptée (awardCareer)
+        this.tournamentDone = false; // résultat du tournoi pas encore compté (showMatchEnd)
         const xp = document.getElementById('match-end-xp');
         if (xp) xp.textContent = '';
         this.lastClockText = null;
@@ -214,8 +215,9 @@ export const ClockMethods = {
         title.textContent = me ? (won ? '🏆 VICTOIRE !' : 'DÉFAITE') : `VICTOIRE DE L'ÉQUIPE ${r.winner}`;
         overlay.classList.toggle('lost', !!me && !won);
         if (!me || won) this.launchConfetti(r.winner); // Effects.js
-        score.textContent = `ÉQUIPE A ${r.scoreA} — ${r.scoreB} ÉQUIPE B`;
-        reason.textContent = `Victoire de l'équipe ${r.winner} : ${r.endReason.toLowerCase()}`;
+        const names = this.teamNames || { A: 'Équipe A', B: 'Équipe B' };
+        score.textContent = `${names.A.toUpperCase()} ${r.scoreA} — ${r.scoreB} ${names.B.toUpperCase()}`;
+        reason.textContent = `Vainqueur : ${names[r.winner] || r.winner} (${r.endReason.toLowerCase()})`;
 
         const pts = (ent) => this.matchSheet.stats[ent.id]?.pts || 0;
         let best = null;
@@ -228,9 +230,16 @@ export const ClockMethods = {
         this.renderMatchSheet();
         this.awardCareer();
 
+        // Tournoi (Tournament.js) : résultat compté une fois ; « Suite du tournoi » à la place de « Rejouer »
+        if (this.tournamentMatch && me && !this.tournamentDone) {
+            this.tournamentDone = true;
+            const mine = me.team === 'A' ? r.scoreA : r.scoreB;
+            this.onTournamentEnd?.(won, mine, me.team === 'A' ? r.scoreB : r.scoreA);
+        }
         // Seul l'hôte peut relancer (il décide pour tout le salon)
         const isHost = this.network.isHost;
-        replay.classList.toggle('hidden', !isHost);
+        replay.classList.toggle('hidden', !isHost || !!this.tournamentMatch);
+        document.getElementById('btn-match-end-tournament')?.classList.toggle('hidden', !this.tournamentMatch);
         wait.classList.toggle('hidden', isHost);
         overlay.classList.remove('hidden');
     },

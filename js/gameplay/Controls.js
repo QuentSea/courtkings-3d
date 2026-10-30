@@ -162,7 +162,8 @@ export const ControlsMethods = {
             me.shotContestMul = move ? move.contestMul : 1;
             const shotDist = this.getHorizontalDist(me.pos, hoop.rimPos);
             const contest = this.calculateContestFactor(me) * me.shotContestMul;
-            this.shotMeter.startCharge(me.profile.attributes, shotDist, contest, move ? move.penalty : 0);
+            // Fatigué (5v5, Fatigue.js) : zone verte plus étroite
+            this.shotMeter.startCharge(me.profile.attributes, shotDist, contest, (move ? move.penalty : 0) + this.fatigueShot(me) * 0.25);
             me.state = 'SHOOT';
             // Armé d'abord (genoux fléchis), saut ensuite : le haut du saut tombe sur la zone verte
             me.shotJumpPending = true;
@@ -357,7 +358,7 @@ export const ControlsMethods = {
         // Posture défensive pendant un tir adverse : box-out (Moves.js)
         this.updateLocalBoxOut(me, isDefending);
         const screened = me.screenedTimer > 0 ? SCREENED_SPEED : 1;
-        const speed = 5.2 * posData.baseSpeed * attrSpeedMod * (isSprinting ? 1.25 : 1.0) * screened;
+        const speed = 5.2 * posData.baseSpeed * attrSpeedMod * (isSprinting ? 1.25 : 1.0) * screened * this.fatigueSpeed(me);
 
         // Écran posé : on reste planté ; se déplacer (après un court instant) lève l'écran
         if (this.isScreening(me)) {

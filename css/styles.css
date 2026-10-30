@@ -1606,6 +1606,32 @@ body.in-match:not(.menu-open) .match-quick-toolbar,
 body.in-match:not(.menu-open) .controls-Overlay-bar { display: none; }
 body.in-match.menu-open .match-hud-top { top: 64px; }
 
+/* Énergie du joueur local (Fatigue.js, 5v5) : en bas au centre */
+.energy-hud {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    z-index: 25;
+    width: 200px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.75);
+    pointer-events: none;
+}
+.energy-text { font-size: 0.72rem; font-weight: 700; color: #e2e8f0; }
+.energy-track {
+    height: 7px;
+    margin-top: 4px;
+    border-radius: 99px;
+    background: rgba(148, 163, 184, 0.25);
+    overflow: hidden;
+}
+.energy-fill { height: 100%; width: 100%; background: #22c55e; }
+.energy-fill.mid { background: var(--accent-gold); }
+.energy-fill.low { background: var(--accent-red); }
+body.in-match.menu-open .energy-hud { display: none; }
+
 /* Commandes tactiles (TouchControls.js) : téléphone et tablette, pendant le match, menu fermé */
 .touch-controls { display: none; }
 body.touch.in-match:not(.menu-open) .touch-controls { display: block; }

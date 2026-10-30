@@ -473,6 +473,12 @@
         <!-- AIDE CONTRÔLES EN BAS (CLAVIER & MANETTE) : remplie selon les touches choisies (renderControlsLegend) -->
         <div id="controls-legend" class="controls-Overlay-bar"></div>
 
+        <!-- ÉNERGIE DU JOUEUR (Fatigue.js) : 5 contre 5 seulement -->
+        <div id="energy-hud" class="energy-hud hidden">
+            <span id="energy-text" class="energy-text">Énergie 100</span>
+            <div class="energy-track"><div id="energy-fill" class="energy-fill"></div></div>
+        </div>
+
         <!-- COMMANDES TACTILES (TouchControls.js) : seulement sur téléphone et tablette -->
         <div id="touch-controls" class="touch-controls">
             <div id="touch-stick" class="touch-stick" aria-label="Joystick : bouger et viser"><div class="touch-knob"></div></div>

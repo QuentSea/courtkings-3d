@@ -293,6 +293,11 @@ export const NetSyncMethods = {
             // Tactique choisie par un invité : seulement pour sa propre équipe
             const player = this.entities.get(packet.senderId);
             if (this.isAuthority && player) this.applyTactics(player.team, payload.def, payload.off, player);
+        } else if (eventName === 'SUB') {
+            // Changement de joueur décidé par l'hôte (Fatigue.js) : même banc chez l'invité, on échange pareil
+            const ent = this.entities.get(payload.id);
+            const bench = ent && this.bench?.[ent.team]?.find(b => b.id === payload.benchId);
+            if (!this.isAuthority && ent?.isBot && bench) this.swapWithBench(ent, bench);
         }
     }
 };

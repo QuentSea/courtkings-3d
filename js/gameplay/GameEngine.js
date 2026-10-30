@@ -41,6 +41,7 @@ import { KeyBindings, ACTIONS } from './Bindings.js';
 import { SoundFX } from '../audio/SoundFX.js';
 import { EffectsMethods } from './Effects.js';
 import { PracticeMethods } from './Practice.js';
+import { FatigueMethods } from './Fatigue.js';
 
 export class GameEngine {
     constructor(canvasContainerId, networkManager) {
@@ -284,8 +285,8 @@ export class GameEngine {
             this.spawnPlayerEntity(p.peerId, 'B', false, p.peerId === localPeerId, p.profile, idx);
         });
 
+        let presetCursor = 1;
         if (lobbyState.fillWithBots !== false) {
-            let presetCursor = 1;
             for (let i = teamAHumans.length; i < playersPerTeam; i++) {
                 const botPreset = structuredClone(CHARACTER_PRESETS[presetCursor % CHARACTER_PRESETS.length]);
                 botPreset.playerName = `[IA] ${botPreset.playerName}`;
@@ -304,6 +305,7 @@ export class GameEngine {
         this.slowMo = 0;
         this.cinema = null;
         this.resetMatchClock();
+        this.resetFatigue(presetCursor); // énergie et remplaçants (5v5, Fatigue.js), avant la première remise en jeu
         this.resetPositionsForCheckBall('A');
         this.updateScoreboardUI();
         this.quality.resetMeasure(); // ne pas juger la fluidité pendant la préparation du match
@@ -525,6 +527,7 @@ export class GameEngine {
         const matchOver = this.matchRules.matchOver;
         this.updateScreens(dt);
         this.updateMoveTimers(dt);
+        this.updateFatigue(dt); // énergie (5v5, Fatigue.js)
         this.updateFreeThrow(dt);
         this.updateTactics(dt);
         this.updateTacticsUI();
@@ -695,4 +698,4 @@ export class GameEngine {
 
 Object.assign(GameEngine.prototype, ControlsMethods, ActionsMethods, BallMethods, RulesMethods, BotAIMethods, CameraMethods,
     NetSyncMethods, ScreenMethods, ClockMethods, MatchSheetMethods, FoulMethods, MoveMethods, TacticMethods, EffectsMethods,
-    PracticeMethods);
+    PracticeMethods, FatigueMethods);

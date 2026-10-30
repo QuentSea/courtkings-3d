@@ -148,11 +148,12 @@ export const MatchSheetMethods = {
 
     /** Feuille compacte pour les invités (envoyée avec l'état du monde à la fin du match) */
     buildSheetPacket() {
-        return { stats: this.matchSheet.stats, log: this.matchSheet.log };
+        return { stats: this.matchSheet.stats, log: this.matchSheet.log, bench: this.bench };
     },
 
     applySheetPacket(sheet) {
         this.matchSheet = { stats: sheet.stats || {}, log: sheet.log || [] };
+        if (sheet.bench) this.bench = sheet.bench; // remplaçants et leurs lignes (Fatigue.js)
         if (!document.getElementById('match-end-overlay')?.classList.contains('hidden')) this.renderMatchSheet();
         this.awardCareer(); // invité : ses statistiques sont arrivées (Clock.js)
     },
@@ -168,8 +169,11 @@ export const MatchSheetMethods = {
         const rows = [];
         for (const team of ['A', 'B']) {
             const score = team === 'A' ? this.matchRules.scoreA : this.matchRules.scoreB;
-            rows.push(`<tr class="sheet-team team-${team.toLowerCase()}"><th colspan="13">ÉQUIPE ${team} — ${score} pts</th></tr>`);
-            const players = [...this.entities.values()].filter(e => e.team === team);
+            const teamName = (this.teamNames?.[team] || `Équipe ${team}`).toUpperCase();
+            rows.push(`<tr class="sheet-team team-${team.toLowerCase()}"><th colspan="13">${esc(teamName)} — ${score} pts</th></tr>`);
+            // Joueurs sur le terrain, puis remplaçants qui ont joué (Fatigue.js)
+            const bench = (this.bench?.[team] || []).filter(b => this.matchSheet.stats[b.id]);
+            const players = [...this.entities.values()].filter(e => e.team === team).concat(bench);
             players.sort((a, b) => (this.matchSheet.stats[b.id]?.pts || 0) - (this.matchSheet.stats[a.id]?.pts || 0));
             for (const ent of players) {
                 const s = this.matchSheet.stats[ent.id] || EMPTY();

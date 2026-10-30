@@ -61,7 +61,8 @@ export const MoveMethods = {
     /** Réussite d'un lay-up selon la finition et la contestation (sert aussi aux bots pour décider) */
     finishChance(player, contest) {
         const finishStat = player.profile.attributes?.finishing || 78;
-        return clamp(0.62 + ((finishStat - 60) / 39) * 0.26 + this.botSkill(player).shot - contest * 0.35, 0.3, 0.92);
+        return clamp(0.62 + ((finishStat - 60) / 39) * 0.26 + this.botSkill(player).shot - this.fatigueShot(player) -
+            contest * 0.35, 0.3, 0.92);
     },
 
     /** Lay-up lâché en haut du saut (hôte) : finition contre contestation, l'euro step divise la contestation par 2 */
@@ -142,7 +143,8 @@ export const MoveMethods = {
 
     floaterChance(bot, contest) {
         const finishStat = bot.profile.attributes?.finishing || 75;
-        return clamp(0.36 + ((finishStat - 60) / 39) * 0.2 + this.botSkill(bot).shot - contest * 0.25, 0.22, 0.58);
+        return clamp(0.36 + ((finishStat - 60) / 39) * 0.2 + this.botSkill(bot).shot - this.fatigueShot(bot) -
+            contest * 0.25, 0.22, 0.58);
     },
 
     /** Petit tir flottant par-dessus le défenseur, au-dessus de la raquette (hôte) */

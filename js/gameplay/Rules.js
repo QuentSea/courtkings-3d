@@ -42,6 +42,7 @@ export const RulesMethods = {
         if (this.isAuthority) {
             this.matchRules.checkBallSeq++;
             this.pickPossessionPlay(offenseTeam); // système d'attaque (Tactics.js)
+            this.makeSubstitutions();             // bots épuisés remplacés (5v5, Fatigue.js)
         }
 
         const isHalf = this.currentMode.isHalfCourt;

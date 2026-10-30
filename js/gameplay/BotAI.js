@@ -33,7 +33,7 @@ export const BotAIMethods = {
         );
         const skill = this.botSkill(bot);
         // Niveau des Bots relevé : vitesse compétitive aussi bien pour vos alliés (4.75) que pour l'équipe adverse (4.35)
-        const botSpeed = (isTeammateOfHuman ? 4.75 : 4.35) * posData.baseSpeed * skill.speed;
+        const botSpeed = (isTeammateOfHuman ? 4.75 : 4.35) * posData.baseSpeed * skill.speed * this.fatigueSpeed(bot);
 
         // Lancers francs : tout le monde reste à sa place (le tireur bot lance tout seul, Fouls.js)
         if (this.matchRules.freeThrow) {
@@ -372,9 +372,9 @@ export const BotAIMethods = {
         const far = three ? 0.1 : 0;
         // Bots alliés : 48 à 82 % ; bots adverses calibrés à 52-64 % ouverts à 2 points (modulé par votre contestation),
         // plus ou moins selon le niveau choisi dans le salon
-        const level = this.botSkill(ent).shot;
+        const level = this.botSkill(ent).shot - this.fatigueShot(ent); // niveau du salon, fatigue (Fatigue.js)
         return isTeammateOfHuman
-            ? Math.max(0.48 - far, Math.min(0.82, (stat / 99) * 0.80 - far - contest * 0.30))
+            ? Math.max(0.48 - far, Math.min(0.82, (stat / 99) * 0.80 - far - this.fatigueShot(ent) - contest * 0.30))
             : Math.max(0.28 - far / 2 + level, Math.min(0.65 + level, 0.52 + ((stat - 60) / 39) * 0.12 - far + level - contest * 0.25));
     },
 

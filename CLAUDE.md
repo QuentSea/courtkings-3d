@@ -354,6 +354,35 @@
     `botFinish`) au lieu de forcer ; contre-attaque (au plus un défenseur replié) : il fonce (`plan` DRIVE).
   - Mesuré ensuite (5v5) : 43 % au cercle dont 2 dunks, 39 % à 3 points, 18 % mi-distance ; 3v3 : euro steps face à
     un défenseur 6 sur 11 au lieu de 17 sur 18.
+- **Huit nouveautés** (29-30 octobre 2026, « tout » après la liste d'idées) — une par commit :
+  - **Son** (`js/audio/SoundFX.js`) : Web Audio sans fichier (dribble, filet, cercle, planche, dunk, contre, sifflet,
+    sirène, foule, chaussures, passes) ; démarre au premier clic ou touche ; `GameEngine.playSound(nom, pos, local)` :
+    l'hôte joue et met en file (`pendingSfx`, envoyé dans WORLD_STATE `sfx`), un invité ne joue que ses sons
+    `local` (dribble, calculé chez chacun par `updateDribbleSound`) et ceux reçus. Bouton « 🔊 Son » (gardé).
+  - **Difficulté** (`DIFFICULTY` dans constants.js, `botSkill` dans BotAI.js) : Facile / Normal / Difficile / Légende,
+    choisie par l'hôte dans le salon (`lobbyState.difficulty`, gardée `courtkings_difficulte`) ; seulement pour les
+    bots qui jouent contre au moins un humain : adresse (tirs, lay-ups, dunks, flottants), vitesse, défense,
+    interceptions, hasard des choix (`think`).
+  - **Effets** (`Effects.js`) : filet qui s'étire (`CourtScene.animateNet/updateNets`, géométrie accrochée par le haut),
+    secousse au smash, dunk au ralenti + caméra de côté seulement en solo (`isSolo`, `gameDt`, `cinema`), étiquettes
+    cachées pendant le ralenti, confettis de l'équipe gagnante.
+  - **Progression** (`js/progress/Career.js`, `CareerUI.js`) : XP par match terminé (`awardCareer` dans Clock.js ;
+    invité : quand sa feuille arrive), niveaux (200 XP puis +50 par niveau, 30 max), +2 points d'atouts par niveau
+    dans le créateur (`getRemainingPoints`), carte « Niveau », fenêtre « Historique & records ».
+  - **Modes en solo** (`Practice.js`, modes `training` / `contest3` dans GAME_MODES avec `practice`) : lancés du salon
+    sans réseau ; pas de chronos ; tirs interceptés dans `resolveShotAtRim` / `finishDunkSlam` ; concours : 70 s,
+    5 emplacements de 5 ballons, 5e = 2 points, record `contest3`.
+  - **Tactile** (`TouchControls.js`) : si `(pointer: coarse)` ; joystick + boutons lus comme une manette
+    (`touch.input()` après `pollGamepadInput`) ; conseil de tourner le téléphone ; HUD réduit si l'écran est bas.
+  - **Tournoi** (`js/progress/Tournament.js`) : 8 équipes, tes adversaires montent d'un niveau par tour, autres matchs
+    simulés ; match lancé par `main.startTournamentMatch` (`lobbyState.tournament`, `teamNames`) ; `offline` : rien
+    n'est envoyé au salon ; « Suite du tournoi » sur l'écran de fin ; titre dans les records.
+  - **Fatigue** (`Fatigue.js`, 5v5 seulement) : énergie selon la vitesse mesurée (`mesh.speed`), sauts, arrêts de
+    jeu ; vitesse jusqu'à -14 %, tir jusqu'à -7 % (jauge plus dure pour un humain) ; 2 remplaçants par équipe de bots
+    (noms à part), changement à la remise en jeu (`makeSubstitutions`, événement SUB : les invités ont le même banc) ;
+    lignes des remplaçants dans la feuille de match ; barre d'énergie. Premiers changements vers 2 min de jeu.
+  - Vérifié en match simulé dans le navigateur (son rendu hors ligne, téléphone simulé 375×812 et 740×360) ; pas
+    retesté à plusieurs sur deux PC ni avec une vraie manette ou un vrai téléphone.
 - **Menu caché pendant le match et pause** (29 octobre 2026, demandé par le joueur) : sur l'écran du match
   (`body.in-match`, posé par `switchScreen`), la barre de navigation, la barre d'outils du match et le bandeau des
   touches (`#controls-legend`) sont cachés ;

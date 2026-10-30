@@ -1028,6 +1028,24 @@ body {
     color: #fff;
 }
 
+/* Volume du son (SoundFX.js) dans la barre du match */
+.hud-volume {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: default;
+}
+.hud-volume input[type="range"] {
+    width: 90px;
+    accent-color: var(--accent-orange);
+    cursor: pointer;
+}
+.hud-volume-value {
+    min-width: 3.6em;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
 /* JAUGE DE TIR (SHOT METER) */
 .shot-meter-container {
     position: absolute;

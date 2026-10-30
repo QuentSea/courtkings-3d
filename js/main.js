@@ -292,17 +292,26 @@ class CourtKingsApp {
             this.gameEngine.bindingsPanel.open();
         });
 
-        // Son (SoundFX.js) : couper ou remettre, gardé dans le navigateur
-        const soundBtn = document.getElementById('btn-hud-sound');
-        const showSound = () => {
-            if (soundBtn) soundBtn.textContent = this.gameEngine.sound.muted ? '🔇 Son coupé' : '🔊 Son';
+        // Volume du son (SoundFX.js) : de coupé à 100 %, gardé dans le navigateur
+        const volume = document.getElementById('hud-volume');
+        const showVolume = () => {
+            const v = Math.round(this.gameEngine.sound.volume * 100);
+            volume.value = v;
+            document.getElementById('hud-volume-value').textContent = v ? `${v} %` : 'coupé';
+            document.getElementById('hud-volume-icon').textContent = v ? '🔊' : '🔇';
         };
-        showSound();
-        soundBtn?.addEventListener('click', (e) => {
-            this.gameEngine.sound.setMuted(!this.gameEngine.sound.muted);
-            showSound();
-            e.currentTarget.blur();
-        });
+        if (volume) {
+            showVolume();
+            volume.addEventListener('input', () => {
+                this.gameEngine.sound.setVolume(volume.value / 100);
+                showVolume();
+            });
+            // Curseur lâché : un petit bruit pour entendre le niveau, et les touches reviennent au jeu
+            volume.addEventListener('change', () => {
+                this.gameEngine.sound.play('swish');
+                volume.blur();
+            });
+        }
 
         // Tactiques de l'équipe du joueur (Tactics.js) : l'hôte décide, un invité envoie son choix
         const offenseSelect = document.getElementById('hud-offense');

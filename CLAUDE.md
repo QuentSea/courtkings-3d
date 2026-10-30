@@ -358,7 +358,9 @@
   - **Son** (`js/audio/SoundFX.js`) : Web Audio sans fichier (dribble, filet, cercle, planche, dunk, contre, sifflet,
     sirène, foule, chaussures, passes) ; démarre au premier clic ou touche ; `GameEngine.playSound(nom, pos, local)` :
     l'hôte joue et met en file (`pendingSfx`, envoyé dans WORLD_STATE `sfx`), un invité ne joue que ses sons
-    `local` (dribble, calculé chez chacun par `updateDribbleSound`) et ceux reçus. Bouton « 🔊 Son » (gardé).
+    `local` (dribble, calculé chez chacun par `updateDribbleSound`) et ceux reçus. Volume réglable (30 octobre, demandé
+    par le joueur à la place d'un bouton couper / remettre) : curseur `#hud-volume` dans la barre du match, 0 % =
+    coupé, `SoundFX.setVolume`, gardé `courtkings_son` (nombre 0-100 ; anciennes valeurs « off » / « on » lues).
   - **Difficulté** (`DIFFICULTY` dans constants.js, `botSkill` dans BotAI.js) : Facile / Normal / Difficile / Légende,
     choisie par l'hôte dans le salon (`lobbyState.difficulty`, gardée `courtkings_difficulte`) ; seulement pour les
     bots qui jouent contre au moins un humain : adresse (tirs, lay-ups, dunks, flottants), vitesse, défense,
@@ -372,8 +374,8 @@
   - **Modes en solo** (`Practice.js`, modes `training` / `contest3` dans GAME_MODES avec `practice`) : lancés du salon
     sans réseau ; pas de chronos ; tirs interceptés dans `resolveShotAtRim` / `finishDunkSlam` ; concours : 70 s,
     5 emplacements de 5 ballons, 5e = 2 points, record `contest3`.
-  - **Tactile** (`TouchControls.js`) : si `(pointer: coarse)` ; joystick + boutons lus comme une manette
-    (`touch.input()` après `pollGamepadInput`) ; conseil de tourner le téléphone ; HUD réduit si l'écran est bas.
+  - **Tactile** : retiré le 30 octobre 2026 à la demande du joueur (« pour l'instant pas sur téléphone ») ; le code est
+    dans le commit 9194ed5 (joystick + boutons lus comme une manette), annulé par 77d3796, à remettre au besoin.
   - **Tournoi** (`js/progress/Tournament.js`) : 8 équipes, tes adversaires montent d'un niveau par tour, autres matchs
     simulés ; match lancé par `main.startTournamentMatch` (`lobbyState.tournament`, `teamNames`) ; `offline` : rien
     n'est envoyé au salon ; « Suite du tournoi » sur l'écran de fin ; titre dans les records.
@@ -381,8 +383,8 @@
     jeu ; vitesse jusqu'à -14 %, tir jusqu'à -7 % (jauge plus dure pour un humain) ; 2 remplaçants par équipe de bots
     (noms à part), changement à la remise en jeu (`makeSubstitutions`, événement SUB : les invités ont le même banc) ;
     lignes des remplaçants dans la feuille de match ; barre d'énergie. Premiers changements vers 2 min de jeu.
-  - Vérifié en match simulé dans le navigateur (son rendu hors ligne, téléphone simulé 375×812 et 740×360) ; pas
-    retesté à plusieurs sur deux PC ni avec une vraie manette ou un vrai téléphone.
+  - Vérifié en match simulé dans le navigateur (son rendu hors ligne) ; pas retesté à plusieurs sur deux PC ni avec
+    une vraie manette.
 - **Menu caché pendant le match et pause** (29 octobre 2026, demandé par le joueur) : sur l'écran du match
   (`body.in-match`, posé par `switchScreen`), la barre de navigation, la barre d'outils du match et le bandeau des
   touches (`#controls-legend`) sont cachés ;

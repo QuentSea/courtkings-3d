@@ -3,19 +3,29 @@
  * planche, sifflet, sirène, foule (bruit de fond qui monte après une belle action).
  * - Le navigateur n'autorise le son qu'après un clic ou une touche : il démarre à ce moment-là.
  * - play(nom, position) : plus fort près de la caméra, à gauche ou à droite selon l'écran.
- * - Son coupé ou non : gardé dans le navigateur (clé `courtkings_son`).
+ * - Volume de 0 (coupé) à 1 : réglé dans le menu du match, gardé dans le navigateur (clé `courtkings_son`).
  */
 
 const STORAGE_KEY = 'courtkings_son';
+const DEFAULT_VOLUME = 0.8;
 const _v = { x: 0, y: 0, z: 0 };
+
+/** Volume gardé : un nombre de 0 à 100 (anciennes valeurs « off » / « on » : coupé / par défaut) */
+function savedVolume() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === 'off') return 0;
+        const n = Number(saved);
+        return saved !== null && saved !== 'on' && Number.isFinite(n) ? Math.max(0, Math.min(1, n / 100)) : DEFAULT_VOLUME;
+    } catch {
+        return DEFAULT_VOLUME; // données du site bloquées
+    }
+}
 
 export class SoundFX {
     constructor() {
         this.ctx = null;
-        this.muted = false;
-        try {
-            this.muted = localStorage.getItem(STORAGE_KEY) === 'off';
-        } catch { /* données du site bloquées : son allumé */ }
+        this.volume = savedVolume();
         const unlock = () => this.unlock();
         window.addEventListener('pointerdown', unlock);
         window.addEventListener('keydown', unlock);
@@ -31,7 +41,7 @@ export class SoundFX {
         if (!Ctx) return;
         this.ctx = new Ctx();
         this.master = this.ctx.createGain();
-        this.master.gain.value = this.muted ? 0 : 0.8;
+        this.master.gain.value = this.volume;
         const limiter = this.ctx.createDynamicsCompressor(); // plusieurs sons en même temps ne saturent pas
         this.master.connect(limiter).connect(this.ctx.destination);
 
@@ -55,12 +65,13 @@ export class SoundFX {
         crowd.start();
     }
 
-    setMuted(muted) {
-        this.muted = muted;
+    /** Volume de 0 (coupé) à 1 */
+    setVolume(volume) {
+        this.volume = Math.max(0, Math.min(1, volume));
         try {
-            localStorage.setItem(STORAGE_KEY, muted ? 'off' : 'on');
+            localStorage.setItem(STORAGE_KEY, String(Math.round(this.volume * 100)));
         } catch { /* pas de sauvegarde : le réglage tient jusqu'à la fermeture */ }
-        if (this.master) this.master.gain.setTargetAtTime(muted ? 0 : 0.8, this.ctx.currentTime, 0.05);
+        if (this.master) this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
     }
 
     /** Murmure de la foule pendant un match (0 hors match) */
@@ -74,7 +85,7 @@ export class SoundFX {
      * gauche/droite ; sans position, le son est au centre
      */
     play(name, position = null, camera = null) {
-        if (!this.ctx || this.muted || this.ctx.state !== 'running') return;
+        if (!this.ctx || this.volume <= 0 || this.ctx.state !== 'running') return;
         let gain = 1;
         let pan = 0;
         if (position && camera) {

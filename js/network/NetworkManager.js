@@ -7,10 +7,54 @@
  * - Synchronise : Profils 3D du Lobby, Équipes (A/B), Mode (3v3, 4v4, 5v5), Positions des joueurs, Animations, Ballon et Score.
  */
 
+import {
+    ATTRIBUTE_POOL, BEARD_STYLES, CHARACTER_PRESETS, HAIR_COLORS, HAIR_STYLES, JERSEY_COLORS, POSITIONS, SKIN_TONES
+} from '../config/constants.js';
+import { MAX_LEVEL, POINTS_PER_LEVEL } from '../progress/Career.js';
+
 // 10 joueurs humains au maximum (5 contre 5)
 const MAX_PER_TEAM = 5;
 const MODE_SIZES = { '3v3': 3, '4v4': 4, '5v5': 5 };
 const DIFFICULTY_KEY = 'courtkings_difficulte';
+// Messages que seul l'hôte envoie : venant d'un invité, ce serait une prise de contrôle du salon
+const HOST_ONLY = new Set(['LOBBY_SYNC', 'START_MATCH', 'WORLD_STATE', 'ROOM_FULL']);
+const PEER_ID = /^peer_[a-z0-9]{1,12}$/;
+
+/**
+ * Profil reçu d'un invité : seulement les champs connus, des choix qui existent, et des atouts dans
+ * les limites du créateur (plafonds du poste, points du plus haut niveau). Un profil truqué ne casse rien.
+ */
+export function cleanProfile(p) {
+    const base = CHARACTER_PRESETS[0];
+    if (!p || typeof p !== 'object') p = base;
+    const pick = (list, v, fallback) => (list.some(o => o.id === v) ? v : fallback);
+    const position = Object.hasOwn(POSITIONS, p.position) ? p.position : base.position;
+    const caps = POSITIONS[position].caps;
+    const min = ATTRIBUTE_POOL.STARTING_BASE;
+    const attributes = {};
+    let bonus = 0;
+    for (const k of Object.keys(caps)) {
+        const v = Number(p.attributes?.[k]);
+        attributes[k] = Math.round(Math.max(min, Math.min(caps[k], Number.isFinite(v) ? v : min)));
+        bonus += attributes[k] - min;
+    }
+    // Plus de points que le niveau maximum n'en donne : tous réduits dans la même proportion
+    const maxBonus = ATTRIBUTE_POOL.TOTAL_BONUS_POINTS + (MAX_LEVEL - 1) * POINTS_PER_LEVEL;
+    if (bonus > maxBonus) {
+        for (const k in attributes) attributes[k] = min + Math.floor((attributes[k] - min) * maxBonus / bonus);
+    }
+    return {
+        playerName: String(p.playerName ?? '').trim().slice(0, 14) || 'Joueur',
+        position,
+        skinTone: pick(SKIN_TONES, p.skinTone, base.skinTone),
+        hairStyle: pick(HAIR_STYLES, p.hairStyle, base.hairStyle),
+        beardStyle: pick(BEARD_STYLES, p.beardStyle, base.beardStyle),
+        hairColor: pick(HAIR_COLORS, p.hairColor, base.hairColor),
+        jerseyColor: pick(JERSEY_COLORS, p.jerseyColor, base.jerseyColor),
+        jerseyNumber: String(p.jerseyNumber ?? '').replace(/\D/g, '').slice(0, 2) || '0',
+        attributes
+    };
+}
 
 /** Dernier niveau des bots choisi par ce joueur (Normal par défaut) */
 function savedDifficulty() {
@@ -220,15 +264,36 @@ export class NetworkManager {
         return Object.values(this.lobbyState.players).filter(p => p.team === team).length;
     }
 
+    /**
+     * Hôte : un paquet d'invité (PeerJS) est-il recevable ? Une seule identité par connexion (fixée par sa
+     * première demande d'entrée), jamais celle de l'hôte ou d'un autre invité, et jamais un message d'hôte.
+     */
+    trustPeerPacket(packet, conn) {
+        if (HOST_ONLY.has(packet.type)) return false;
+        const id = packet.senderId;
+        if (packet.type === 'JOIN_REQUEST') {
+            if (typeof id !== 'string' || !PEER_ID.test(id) || id === this.localPeerId) return false;
+            if (conn.lobbyPeerId && conn.lobbyPeerId !== id) return false;
+            for (const other of this.peers.values()) {
+                if (other !== conn && other.lobbyPeerId === id) return false;
+            }
+            return true;
+        }
+        if (!conn.lobbyPeerId || id !== conn.lobbyPeerId) return false;
+        // Numéro d'action à son nom : sinon il pourrait faire ignorer (doublon) les actions d'un autre
+        return packet.type !== 'GAME_EVENT' || String(packet.eventId).startsWith(`${id}_`);
+    }
+
     handleIncomingPacket(packet, conn = null) {
         if (!packet || !packet.type) return;
+        if (conn && this.isHost && !this.trustPeerPacket(packet, conn)) return;
 
         if (packet.type === 'JOIN_REQUEST' && this.isHost) {
             if (conn) conn.lobbyPeerId = packet.senderId;
             // La demande arrive par BroadcastChannel ET par PeerJS : ne pas recompter un joueur déjà présent
             const existing = this.lobbyState.players[packet.senderId];
             if (existing) {
-                existing.profile = packet.profile;
+                existing.profile = cleanProfile(packet.profile);
                 this.broadcastLobbyState();
                 this.notifyLobbyUpdated();
                 return;
@@ -245,7 +310,7 @@ export class NetworkManager {
             this.lobbyState.players[packet.senderId] = {
                 peerId: packet.senderId,
                 team: assignedTeam,
-                profile: packet.profile,
+                profile: cleanProfile(packet.profile),
                 isHost: false
             };
             this.broadcastLobbyState();
@@ -264,7 +329,7 @@ export class NetworkManager {
             this.notifyLobbyUpdated();
         } else if (packet.type === 'TEAM_SWITCH') {
             const p = this.lobbyState.players[packet.senderId];
-            if (p) {
+            if (p && (packet.team === 'A' || packet.team === 'B')) {
                 // L'hôte refuse d'aller dans une équipe déjà à 5 (et renvoie le salon pour annuler le changement)
                 const full = p.team !== packet.team && this.countTeam(packet.team) >= MAX_PER_TEAM;
                 if (!full) p.team = packet.team;
@@ -274,7 +339,7 @@ export class NetworkManager {
         } else if (packet.type === 'PROFILE_UPDATE') {
             const p = this.lobbyState.players[packet.senderId];
             if (p) {
-                p.profile = packet.profile;
+                p.profile = this.isHost ? cleanProfile(packet.profile) : packet.profile;
                 if (this.isHost) this.broadcastLobbyState();
                 this.notifyLobbyUpdated();
             }

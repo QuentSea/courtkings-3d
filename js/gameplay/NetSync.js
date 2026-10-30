@@ -9,15 +9,37 @@ export const NetSyncMethods = {
     handleRemotePlayerState(packet) {
         const ent = this.entities.get(packet.senderId);
         if (!ent || ent.isLocal) return;
-        if (packet.pos) {
+        const p = packet.pos;
+        // Position invalide (NaN, infini) ignorée : elle se propagerait à tous par les collisions
+        if (p && [p.x, p.y, p.z].every(Number.isFinite)) {
+            const next = new THREE.Vector3(p.x, Math.max(0, Math.min(3, p.y)), p.z);
+            this.clampToCourtBounds(next);
+            // Pas de téléportation : au plus 12 m/s depuis la dernière position reçue (sprint ~8 m/s, dunk ~10 m/s)
+            const now = performance.now() / 1000;
+            // Remise en jeu ou lancer franc : chacun est replacé d'un coup, 1 s sans limite pour suivre
+            if (ent.netSeq !== this.matchRules.checkBallSeq) {
+                ent.netSeq = this.matchRules.checkBallSeq;
+                ent.netFreeUntil = now + 1;
+            }
+            if (ent.netPos && now > ent.netFreeUntil) {
+                const maxStep = 12 * Math.min(1, now - ent.netTime) + 1.5;
+                const dx = next.x - ent.netPos.x;
+                const dz = next.z - ent.netPos.z;
+                const d = Math.hypot(dx, dz);
+                if (d > maxStep) {
+                    next.x = ent.netPos.x + dx / d * maxStep;
+                    next.z = ent.netPos.z + dz / d * maxStep;
+                }
+            }
+            ent.netTime = now;
             // x/z lissés dans update() ; la hauteur (saut) est appliquée directement
-            ent.netPos = new THREE.Vector3(packet.pos.x, packet.pos.y, packet.pos.z);
-            ent.pos.y = packet.pos.y;
+            ent.netPos = next;
+            ent.pos.y = next.y;
         }
-        if (typeof packet.rotY === 'number') {
+        if (Number.isFinite(packet.rotY)) {
             ent.rotY = packet.rotY;
         }
-        if (packet.state) {
+        if (typeof packet.state === 'string' && /^[A-Z_]{2,16}$/.test(packet.state)) {
             ent.state = packet.state;
         }
         ent.boxOutTimer = packet.box ? 0.15 : 0; // box-out de l'invité (collisions chez l'hôte, Moves.js)
@@ -214,40 +236,88 @@ export const NetSyncMethods = {
         return !!carrier && carrier.team !== stealer.team;
     },
 
+    /**
+     * Hôte : distance horizontale d'un joueur au ballon en vol (segment départ → arrivée).
+     * Le ballon a avancé pendant le trajet du message : on mesure à toute sa trajectoire.
+     */
+    distToFlight(ent) {
+        const seg = new THREE.Line3(this.ball.flightStart, this.ball.flightTarget);
+        return this.getHorizontalDist(ent.pos, seg.closestPointToPoint(ent.pos, true, new THREE.Vector3()));
+    },
+
     handleRemoteGameEvent(packet) {
-        const { eventName, payload } = packet;
+        const { eventName } = packet;
+        const payload = packet.payload || {};
+        // Hôte : un invité n'agit que pour son propre joueur (le nom dans l'action doit être le sien)
+        const own = (id) => !this.isAuthority || id === packet.senderId;
         if (eventName === 'PASS') {
             const fromEnt = this.entities.get(payload.fromId);
             const toEnt = this.entities.get(payload.toId);
+            // Sa propre passe, ou le ballon qu'il demande à un bot coéquipier (requestPassFromBot)
+            const asked = fromEnt?.isBot && own(payload.toId) && toEnt && fromEnt.team === toEnt.team;
+            if (!own(payload.fromId) && !asked) return;
             // L'hôte refuse une passe d'un joueur qui n'a plus le ballon (interception arrivée avant)
             if (this.isAuthority && this.ball.holderId !== payload.fromId) return;
             if (fromEnt && toEnt) this.launchPass(fromEnt, toEnt, false);
         } else if (eventName === 'SHOT') {
             const shooter = this.entities.get(payload.shooterId);
+            if (!own(payload.shooterId)) return;
             if (this.isAuthority && this.ball.holderId !== payload.shooterId) return;
             if (shooter) {
                 const hoop = this.getAttackingHoopForTeam(shooter.team);
-                this.launchShotBall(shooter, hoop, payload.outcome, false);
+                const o = payload.outcome || {};
+                // La réussite vient de la jauge de l'invité ; les 3 points, l'hôte les vérifie à la position du tireur
+                // (0,7 m de marge : sa position ici a un peu de retard)
+                const deep = this.getHorizontalDist(shooter.pos, hoop.rimPos) >= 5.55 - 0.7;
+                const outcome = this.isAuthority
+                    ? { isMake: !!o.isMake, isGreen: !!o.isGreen, isThreePointer: !!o.isThreePointer && deep, kind: o.kind === 'layup' ? 'layup' : undefined }
+                    : o;
+                this.launchShotBall(shooter, hoop, outcome, false);
             }
         } else if (eventName === 'BLOCK') {
             const blocker = this.entities.get(payload.blockerId);
+            if (!own(payload.blockerId)) return;
             // Contre arrivé en retard (ballon déjà retombé ou ramassé) : l'hôte l'ignore
             if (this.isAuthority && !this.canStillBeBlocked(blocker)) return;
-            if (this.isAuthority) this.onBlock(payload.blockerId, this.ball.pendingShotOutcome?.shooterId || this.ball.holderId);
+            if (this.isAuthority) {
+                // Près du ballon (ou du tireur) : pas de contre depuis l'autre bout du terrain
+                const carrier = this.ball.state === 'HELD' ? this.entities.get(this.ball.holderId) : null;
+                const near = carrier ? this.getHorizontalDist(blocker.pos, carrier.pos) <= 2.6 : this.distToFlight(blocker) <= 2.6;
+                if (!near) return;
+                this.onBlock(payload.blockerId, this.ball.pendingShotOutcome?.shooterId || this.ball.holderId);
+            }
             const fouledShot = this.ball.pendingShotOutcome;
             this.ball.holderId = null;
             this.ball.pendingShotOutcome = null;
             this.ball.state = 'LOOSE';
-            if (payload.pos) this.ball.pos.set(payload.pos.x, payload.pos.y, payload.pos.z);
-            if (payload.vel) this.ball.vel.set(payload.vel.x, payload.vel.y, payload.vel.z);
+            // Ballon renvoyé : position proche de la sienne et vitesse raisonnable, sinon l'hôte garde les siennes
+            const p = payload.pos;
+            if (p && [p.x, p.y, p.z].every(Number.isFinite) && Math.hypot(p.x - this.ball.pos.x, p.z - this.ball.pos.z) <= 3) {
+                this.ball.pos.set(p.x, Math.max(0.2, Math.min(4.5, p.y)), p.z);
+            }
+            const v = payload.vel;
+            if (v && [v.x, v.y, v.z].every(Number.isFinite)) {
+                const clamp = (n) => Math.max(-10, Math.min(10, n));
+                this.ball.vel.set(clamp(v.x), clamp(v.y), clamp(v.z));
+            }
             if (blocker) {
                 this.showRuleAlert(`🚫 CONTRE ÉNORME DE ${blocker.profile.playerName} !`);
             }
             this.foulOnBlockedShot(fouledShot); // faute déjà sifflée sur ce tir (Fouls.js)
         } else if (eventName === 'STEAL') {
             const stealer = this.entities.get(payload.stealerId);
+            if (!own(payload.stealerId)) return;
             // Interception arrivée en retard (tir parti, balle morte, ballon déjà à son équipe) : ignorée
             if (this.isAuthority && !this.canStillBeStolen(stealer)) return;
+            if (this.isAuthority) {
+                // Près du porteur (1,95 m chez lui) ou de la ligne de passe (2,15 m), avec la marge du retard,
+                // et pas plus d'une tentative par seconde (comme chez lui)
+                const carrier = this.ball.state === 'HELD' ? this.entities.get(this.ball.holderId) : null;
+                const near = carrier ? this.getHorizontalDist(stealer.pos, carrier.pos) <= 3 : this.distToFlight(stealer) <= 3.2;
+                const now = performance.now() / 1000;
+                if (!near || now - (stealer.netStealAt || 0) < 0.9) return;
+                stealer.netStealAt = now;
+            }
             if (stealer) {
                 this.giveBallTo(stealer.id, true);
                 this.showRuleAlert(`⚡ INTERCEPTION DE ${stealer.profile.playerName} !`);
@@ -255,25 +325,39 @@ export const NetSyncMethods = {
         } else if (eventName === 'SCREEN_CALL') {
             // Un invité porteur demande un écran : l'hôte envoie un bot
             const handler = this.entities.get(payload.handlerId);
-            if (handler && this.isAuthority && this.ball.holderId === handler.id) this.startPickAndRoll(handler, true);
+            if (handler && own(handler.id) && this.isAuthority && this.ball.holderId === handler.id) this.startPickAndRoll(handler, true);
         } else if (eventName === 'DUNK_START') {
             const dunker = this.entities.get(payload.playerId);
             // Chez un invité, le dunk d'un autre est déjà visible par l'état du monde de l'hôte
-            if (dunker && this.isAuthority) {
+            if (dunker && this.isAuthority && own(dunker.id) && !dunker.isDunking) {
+                const hoop = this.getAttackingHoopForTeam(dunker.team);
+                const pt = (q) => (q && Number.isFinite(q.x) && Number.isFinite(q.z) ? new THREE.Vector3(q.x, 0, q.z) : null);
+                const start = pt(payload.startPos);
+                const target = pt(payload.targetPos);
+                const mid = payload.mid ? pt(payload.mid) : null;
+                // Ballon en main, départ là où il est, à portée de finition (+ marge du retard), arrivée sous le cercle
+                const ok = this.ball.state === 'HELD' && this.ball.holderId === dunker.id && start && target &&
+                    this.getHorizontalDist(start, dunker.pos) <= 2.5 &&
+                    this.getHorizontalDist(start, hoop.rimPos) <= this.finishRange(dunker) + 1.8 &&
+                    this.getHorizontalDist(target, hoop.rimPos) <= 1.5 &&
+                    (!payload.mid || (mid && this.getHorizontalDist(mid, hoop.rimPos) <= 5));
+                if (!ok) return;
                 this.beginFinish(
                     dunker,
-                    this.getAttackingHoopForTeam(dunker.team),
-                    new THREE.Vector3(payload.startPos.x, 0, payload.startPos.z),
-                    new THREE.Vector3(payload.targetPos.x, 0, payload.targetPos.z),
-                    payload.mid ? new THREE.Vector3(payload.mid.x, 0, payload.mid.z) : null,
+                    hoop,
+                    start,
+                    target,
+                    mid,
                     payload.kind === 'LAYUP' ? 'LAYUP' : 'DUNK',
-                    Math.max(0.3, Math.min(1.1, payload.duration || 0.5))
+                    Math.max(0.3, Math.min(1.1, Number(payload.duration) || 0.5))
                 );
             }
         } else if (eventName === 'ALLEY_OOP') {
             const passer = this.entities.get(payload.fromId);
             const receiver = this.entities.get(payload.toId);
             if (!passer || !receiver || passer.team !== receiver.team) return;
+            // Le passeur, ou le receveur qui la demande au bot porteur
+            if (!own(passer.id) && !own(receiver.id)) return;
             if (this.isAuthority) {
                 // L'hôte vérifie que le passeur a encore le ballon, puis lance (et relaie au receveur invité)
                 if (this.ball.holderId !== passer.id || this.ball.state !== 'HELD') return;

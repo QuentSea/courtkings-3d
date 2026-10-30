@@ -406,6 +406,27 @@
   - salon : le canvas 3D ne garde plus la colonne du milieu à son ancienne taille (Équipe B hors écran).
   - Vérifié à 780, 1024, 1366 et 1920 px (créateur, salon, match, pause, alerte, fenêtre « Touches »), avec un
     script qui compare les rectangles des textes et des boutons.
+- **Sécurité du multijoueur** (30 octobre 2026, audit `agent-skills:security-and-hardening` demandé par le joueur) :
+  l'hôte ne croit plus un invité sur parole.
+  - `NetworkManager.trustPeerPacket` (paquets PeerJS reçus par l'hôte) : une identité par connexion (fixée par la
+    première `JOIN_REQUEST`, jamais celle de l'hôte ni d'un autre invité), `senderId` = cette identité, `eventId` à son
+    nom ; messages d'hôte (`LOBBY_SYNC`, `START_MATCH`, `WORLD_STATE`, `ROOM_FULL`) refusés. BroadcastChannel (onglets
+    du même PC) reste sans contrôle. `TEAM_SWITCH` : seulement A ou B.
+  - `cleanProfile` : profil reçu ramené aux choix existants, nom ≤ 14 caractères, atouts dans les plafonds du poste et
+    les points du niveau maximum (`MAX_LEVEL`, Career.js).
+  - `handleRemoteGameEvent` (hôte) : l'action doit nommer le joueur de l'invité (sauf passe demandée à un bot
+    coéquipier, alley-oop demandé) ; interception à ≤ 3 m du porteur ou 3,2 m de la ligne de passe, une par 0,9 s ;
+    contre à ≤ 2,6 m ; ballon renvoyé : position à ≤ 3 m, vitesse ±10 ; dunk : ballon en main, départ à ≤ 2,5 m de sa
+    position, à portée de finition + 1,8 m ; tir : 3 points seulement à ≥ 4,85 m du cercle chez l'hôte.
+  - `handleRemotePlayerState` : position non finie ignorée, gardée sur le terrain, au plus 12 m/s (+1,5 m), libre 1 s
+    après chaque remise en jeu (`checkBallSeq`).
+  - Reste décidé chez l'invité (comme avant) : réussite d'un tir (sa jauge) et d'une interception ou d'un contre
+    dans les distances permises. Pas fait : empreinte (SRI) des scripts CDN, mot de passe de salon.
+  - Testé : `tests/reseau.test.mjs` (4 tests, 3 échouent si on retire le contrôle) ; faux invité tricheur dans le
+    navigateur (interception de loin, à répétition, au nom d'un autre, 3 points sous le cercle, dunk sans ballon ou
+    de 12 m, contre de loin, NaN, téléportation : tout refusé ; vrais 3 points, dunk, passe demandée à un bot : acceptés) ;
+    vrai invité par PeerJS seul (salon, match, positions, appel d'écran reçus ; faux salon, 2e identité, profil à 999
+    refusés ou corrigés).
 - **Limites connues** : l'invité est en retard d'environ 50 ms + latence ; si l'hôte quitte, le match s'arrête
   (pas de migration d'hôte) ; PeerJS entre 2 PC pas encore testé.
 - La console du navigateur intégré garde les erreurs d'avant un rechargement : pour tester, compter les

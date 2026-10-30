@@ -8,7 +8,7 @@
 
 const STORAGE_KEY = 'courtkings_carriere';
 const HISTORY = 20;
-const MAX_LEVEL = 30;
+export const MAX_LEVEL = 30;
 export const POINTS_PER_LEVEL = 2;
 
 function empty() {
